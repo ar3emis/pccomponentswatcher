@@ -1,27 +1,48 @@
 'use strict';
 
 /**
- * Static-site shim for the dashboard.
+ * Web shim for the dashboard.
  *
  * `renderer/app.js` is shared verbatim between the desktop app and this site.
  * On the desktop it talks to the main process over IPC through the preload's
- * `window.ramwatch`; here the same surface is served from a JSON file that a
- * scheduled job regenerates. Nothing in the UI needs to know the difference.
+ * `window.ramwatch`; here the same surface is backed by the Worker's API.
+ *
+ * The payload returned by /api/data depends on who is asking. A free visitor
+ * receives a blob that never contained the locked prices, so nothing here needs
+ * to hide anything — `lockedListings` is simply what the server chose to send.
  */
 (function () {
-  const DATA_URL = 'data.json?v=' + Date.now();
-
   let payload = null;
-  const load = fetch(DATA_URL).then((r) => {
-    if (!r.ok) throw new Error(`could not load data.json (HTTP ${r.status})`);
-    return r.json();
-  });
+  let account = { signedIn: false, tier: 'anon', email: null, priceUSD: 5 };
 
   const noop = () => {};
 
+  async function getJSON(url, opts) {
+    const res = await fetch(url, { credentials: 'same-origin', ...opts });
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try {
+        detail = (await res.json()).error || detail;
+      } catch (_) {}
+      throw new Error(detail);
+    }
+    return res.json();
+  }
+
+  const load = (async () => {
+    // Identity first: it decides which payload the data call returns.
+    try {
+      account = await getJSON('/api/me');
+    } catch (_) {
+      /* Signed out is a normal state, not an error. */
+    }
+    payload = await getJSON('/api/data');
+    return payload;
+  })();
+
   window.ramwatch = {
     async bootstrap() {
-      payload = await load;
+      await load;
       return {
         settings: payload.settings,
         countries: payload.countries,
@@ -35,14 +56,16 @@
         snapshot: payload.snapshot,
         stats: stats(),
         refreshing: false,
-        appVersion: 'web'
+        appVersion: 'web',
+        account,
+        freeMaxGB: payload.freeMaxGB
       };
     },
 
     ready: async () => true,
 
-    // The site cannot scrape from the browser: retailers block cross-origin
-    // requests. Refreshing is the scheduled job's responsibility.
+    // Retailers block cross-origin requests, so the browser cannot scrape.
+    // Refreshing is the scheduled job's responsibility.
     refresh: async () => false,
 
     // Filter choices are per-visitor and per-session only.
@@ -56,13 +79,39 @@
     },
 
     stats: async () => stats(),
+
     open: async (url) => {
       if (/^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
       return true;
     },
+
     revealDataFile: async () => {
-      window.open(DATA_URL, '_blank', 'noopener,noreferrer');
+      window.open('/api/data', '_blank', 'noopener,noreferrer');
       return true;
+    },
+
+    // ── Account ────────────────────────────────────────────────────────────
+    account: () => account,
+
+    signIn() {
+      const returnTo = encodeURIComponent(location.pathname + location.search);
+      location.href = `/auth/google?returnTo=${returnTo}`;
+    },
+
+    signOut() {
+      location.href = '/auth/logout';
+    },
+
+    /** Sends the visitor to Stripe Checkout. */
+    async subscribe() {
+      const { url } = await getJSON('/api/checkout', { method: 'POST' });
+      location.href = url;
+    },
+
+    /** Stripe-hosted page for changing card details or cancelling. */
+    async manageBilling() {
+      const { url } = await getJSON('/api/portal', { method: 'POST' });
+      location.href = url;
     },
 
     onSnapshot: noop,
@@ -77,7 +126,7 @@
       trackedListings: series.length,
       dataPoints: series.reduce((a, s) => a + s.length, 0),
       lastRefresh: payload ? payload.generatedAt : null,
-      file: 'data.json — regenerated automatically every 6 hours'
+      file: 'prices refresh automatically every 6 hours'
     };
   }
 })();

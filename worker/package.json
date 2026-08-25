@@ -1,0 +1,15 @@
+{
+  "name": "pccomponentswatcher-worker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Cloudflare Worker serving the gated price API",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "schema": "wrangler d1 execute pcw-db --remote --file schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.125.0"
+  }
+}

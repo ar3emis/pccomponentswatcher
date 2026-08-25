@@ -50,20 +50,49 @@ The NSIS installer lands in `dist/`.
 ## The website
 
 ```
-npm run export-web
+npm run export-web    # scrape, then build site/ and dist-data/
+npm run dev-web       # serve it locally with a stub API
+npm test              # the access-control guarantees
 ```
 
-Runs a full scrape and writes a self-contained static site into `site/` —
-`data.json` plus the dashboard's own HTML, CSS and JS. `web/bridge.js` stands in
-for the desktop preload, serving the same API surface from that JSON, so
-`renderer/app.js` and `renderer/charts.js` are reused byte-for-byte.
+`web/bridge.js` stands in for the desktop preload, serving the same API surface
+from the Worker, so `renderer/app.js` and `renderer/charts.js` are reused
+byte-for-byte between the desktop app and the site.
 
 Add `--no-browser` to skip the retailers that need a real browser engine, which
 is much faster when you only want to check the HTTP sources.
 
-A GitHub Actions workflow re-runs the scrape every six hours and republishes to
-GitHub Pages. Price history is committed back to `data/history.json` between
-runs so the trend lines survive.
+`npm run dev-web` serves `/?tier=anon`, `/?tier=free` and `/?tier=paid` so each
+access level can be seen without Google or Stripe configured.
+
+### Access control
+
+The site is free up to **16 GB** — memory kits and graphics cards alike. Above
+that, a listing's *price range* is public but **which market and retailer has
+it** requires a $5/month subscription. That split is deliberate: the aggregation
+across six markets is the thing worth paying for, so revealing the retailer
+would give the whole product away.
+
+Two payloads are built at scrape time and stored separately:
+
+| Key | Contains |
+|---|---|
+| `data:free` | Listings ≤16 GB in full, plus one location-free aggregate per larger product |
+| `data:full` | Everything |
+
+The Worker chooses between them and never filters one into the other, so no
+request-time bug can expose a locked price — the free payload simply never
+contained one. `npm test` enforces this, along with the rule that no payload may
+sit in the publicly-served asset root.
+
+### Deployment
+
+A GitHub Actions workflow re-scrapes every six hours, runs the access-control
+tests, uploads both payloads to Cloudflare KV and deploys the Worker. Price
+history is committed back to `data/history.json` so trend lines survive.
+
+Setting up the Cloudflare, Google and Stripe accounts is described in
+[SETUP.md](SETUP.md).
 
 ## How the data is fetched
 

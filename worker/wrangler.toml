@@ -1,0 +1,26 @@
+name = "pccomponentswatcher"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+# The built dashboard. `npm run export-web` produces this directory.
+[assets]
+directory = "../site"
+binding = "ASSETS"
+
+# Published price payloads: data:free and data:full.
+[[kv_namespaces]]
+binding = "DATA"
+id = "PLACEHOLDER_KV_ID"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pcw-db"
+database_id = "PLACEHOLDER_D1_ID"
+
+# Secrets are NOT set here — they would end up in git. Set each one with:
+#   npx wrangler secret put GOOGLE_CLIENT_ID
+#   npx wrangler secret put GOOGLE_CLIENT_SECRET
+#   npx wrangler secret put SESSION_SECRET
+#   npx wrangler secret put STRIPE_SECRET_KEY
+#   npx wrangler secret put STRIPE_PRICE_ID
+#   npx wrangler secret put STRIPE_WEBHOOK_SECRET

@@ -26,7 +26,11 @@ const state = {
   },
   sort: { key: 'priceINR', dir: 'asc' },
   tab: 'table',
-  compareCompleteOnly: false
+  compareCompleteOnly: false,
+  // Web only. The desktop app has no accounts, so this stays null there and
+  // every account-aware branch below degrades to the unrestricted view.
+  account: null,
+  freeMaxGB: null
 };
 
 const VENDOR_ORDER = ['NVIDIA', 'AMD', 'Intel'];
@@ -79,6 +83,34 @@ function median(values) {
 }
 
 // ── Filtering ──────────────────────────────────────────────────────────────
+
+/**
+ * Locked products the server described but would not price, filtered by the
+ * same controls as the real rows. Empty for subscribers and on the desktop.
+ */
+function visibleLocked() {
+  const snap = state.snapshot;
+  if (!snap || !snap.lockedListings) return [];
+  const f = state.filters;
+  const terms = f.search.toLowerCase().split(/\s+/).filter(Boolean);
+  const gpu = isGpu();
+
+  return snap.lockedListings.filter((l) => {
+    if (l.category !== state.category) return false;
+    if (f.memory.size && !f.memory.has(l.memoryGB)) return false;
+    if (gpu) {
+      if (f.vendors.size && !f.vendors.has(l.vendor)) return false;
+      if (f.models.size && !f.models.has(l.modelId)) return false;
+    } else if (f.form !== 'all' && l.formFactor !== f.form) return false;
+    if (f.brands.size && !f.brands.has(l.brandId)) return false;
+    if (terms.length) {
+      // Deliberately excludes retailer and country: a locked row has neither.
+      const hay = `${l.title} ${l.brandName} ${l.modelName || ''}`.toLowerCase();
+      if (!terms.every((t) => hay.includes(t))) return false;
+    }
+    return true;
+  });
+}
 
 function visibleListings() {
   const snap = state.snapshot;
@@ -139,13 +171,15 @@ function sortListings(rows) {
 
 function renderTable() {
   const rows = sortListings(visibleListings());
+  const locked = visibleLocked();
   const body = $('#priceBody');
   const empty = $('#tableEmpty');
   const gpu = isGpu();
 
-  $('#resultCount').textContent = `${rows.length} listing${rows.length === 1 ? '' : 's'}`;
+  $('#resultCount').textContent =
+    `${rows.length} listing${rows.length === 1 ? '' : 's'}` + (locked.length ? ` · ${locked.length} locked` : '');
 
-  if (!rows.length) {
+  if (!rows.length && !locked.length) {
     body.innerHTML = '';
     empty.classList.remove('hidden');
     empty.textContent = state.snapshot
@@ -190,6 +224,47 @@ function renderTable() {
         <td class="num inr ${isBest ? 'inr-best' : ''}">${fmtINR(r.priceINR)}${deltaBadge(series)}</td>
         <td class="num">${r.pricePerGBINR ? fmtINR(r.pricePerGBINR) : '—'}</td>
         <td class="num">${window.Charts.sparkline(series)}</td>
+      </tr>`;
+    })
+    .join('') + lockedRowsHtml(locked, gpu);
+}
+
+/**
+ * Rows for products the server priced but would not locate. There is no URL,
+ * retailer or country to render — the API never sent one.
+ */
+function lockedRowsHtml(locked, gpu) {
+  if (!locked.length) return '';
+
+  const sorted = [...locked].sort((a, b) => a.memoryGB - b.memoryGB || a.minPriceINR - b.minPriceINR);
+
+  return sorted
+    .slice(0, 400)
+    .map((l) => {
+      const tierCls = l.brandTier === 1 ? 'brand-t1' : l.brandTier === 2 ? 'brand-t2' : '';
+      const sizeCell = gpu ? `${l.vram}GB` : `${l.totalGB}GB${l.modules > 1 ? ` <span class="cell-sub">${l.modules}×${l.moduleGB}</span>` : ''}`;
+      const specCells = gpu
+        ? `<td class="gpu-only">${escapeHtml(l.modelName || '—')}${l.oc ? ' <span class="cell-sub">OC</span>' : ''}</td>`
+        : `<td class="num ram-only">${l.speed || '—'}</td><td class="num ram-only">${l.cas ? 'CL' + l.cas : '—'}</td>`;
+
+      const range =
+        l.minPriceINR === l.maxPriceINR
+          ? fmtINR(l.minPriceINR)
+          : `${fmtINR(l.minPriceINR)} – ${fmtINR(l.maxPriceINR)}`;
+
+      return `<tr class="row-locked">
+        <td class="brand-cell ${tierCls}">${escapeHtml(l.brandName)}</td>
+        <td><span class="locked-title">${escapeHtml(l.title)}</span></td>
+        <td class="num">${sizeCell}</td>
+        ${specCells}
+        <td class="locked-cell" colspan="2">
+          <span class="lock-ico" aria-hidden="true">🔒</span>
+          <button class="link-btn unlock-btn">Unlock ${l.marketCount} market${l.marketCount === 1 ? '' : 's'}</button>
+        </td>
+        <td class="num cell-empty">—</td>
+        <td class="num inr locked-price">${range}</td>
+        <td class="num">${l.spreadPct ? l.spreadPct + '%' : '—'}</td>
+        <td class="num cell-sub">${l.offerCount} offer${l.offerCount === 1 ? '' : 's'}</td>
       </tr>`;
     })
     .join('');
@@ -505,7 +580,70 @@ function setStatus(kind, text) {
   pill.textContent = text;
 }
 
+// ── Account & paywall (web only) ───────────────────────────────────────────
+
+/** Renders the sign-in / subscription controls. No-op in the desktop app. */
+function renderAccount() {
+  const host = $('#accountBar');
+  if (!host || !state.account) return;
+  const a = state.account;
+
+  if (!a.signedIn) {
+    host.innerHTML = `<button class="btn btn-primary" id="signInBtn">Sign in with Google</button>`;
+    return;
+  }
+
+  const badge =
+    a.tier === 'paid'
+      ? `<span class="tier-badge tier-paid">${a.admin ? 'Full access' : 'Subscribed'}</span>`
+      : `<span class="tier-badge tier-free">Free</span>`;
+
+  const action =
+    a.tier === 'paid'
+      ? a.admin
+        ? ''
+        : `<button class="link-btn" id="billingBtn">Manage billing</button>`
+      : `<button class="btn btn-primary btn-sm" id="upgradeBtn">Unlock all · $${a.priceUSD}/mo</button>`;
+
+  host.innerHTML = `
+    <div class="account">
+      ${badge}
+      <span class="account-email" title="${escapeHtml(a.email)}">${escapeHtml(a.email)}</span>
+      ${action}
+      <button class="link-btn" id="signOutBtn">Sign out</button>
+    </div>`;
+}
+
+/** The strip that explains why some rows are locked. */
+function renderUpgradeBanner() {
+  const host = $('#upgradeBanner');
+  if (!host || !state.account) return;
+
+  const a = state.account;
+  const hidden = (state.snapshot && state.snapshot.lockedCount) || 0;
+  if (a.tier === 'paid' || !hidden) {
+    host.classList.add('hidden');
+    return;
+  }
+
+  host.classList.remove('hidden');
+  const max = state.freeMaxGB || 16;
+  host.innerHTML = `
+    <div class="banner-text">
+      <strong>${hidden} listings above ${max}GB are locked.</strong>
+      You can see how cheap they get — but not which of the six markets has them.
+      ${a.signedIn ? '' : 'Sign in free to see every listing up to ' + max + 'GB.'}
+    </div>
+    ${
+      a.signedIn
+        ? `<button class="btn btn-primary btn-sm" id="bannerUpgrade">Unlock all · $${a.priceUSD}/mo</button>`
+        : `<button class="btn btn-primary btn-sm" id="bannerSignIn">Sign in with Google</button>`
+    }`;
+}
+
 function renderAll() {
+  renderAccount();
+  renderUpgradeBanner();
   renderFx();
   $('#lastUpdated').textContent = state.snapshot ? `updated ${fmtAgo(state.snapshot.fetchedAt)}` : '';
   if (state.tab === 'table') renderTable();
@@ -641,6 +779,25 @@ function applyDefaults() {
   syncChips();
 }
 
+/** An anonymous visitor must sign in before there is an account to bill. */
+async function startCheckout() {
+  if (!state.account) return;
+  if (!state.account.signedIn) return api.signIn();
+  try {
+    await api.subscribe();
+  } catch (err) {
+    setStatus('error', `Could not start checkout: ${err.message}`);
+  }
+}
+
+async function openBilling() {
+  try {
+    await api.manageBilling();
+  } catch (err) {
+    setStatus('error', `Could not open billing: ${err.message}`);
+  }
+}
+
 function switchCategory(cat) {
   if (state.category === cat) return;
   state.category = cat;
@@ -669,6 +826,12 @@ function wire() {
       return;
     }
     if (!dropdown) closeDropdowns();
+
+    // Account controls exist only on the web build.
+    if (e.target.closest('#signInBtn, #bannerSignIn')) return api.signIn();
+    if (e.target.closest('#signOutBtn')) return api.signOut();
+    if (e.target.closest('#upgradeBtn, #bannerUpgrade, .unlock-btn')) return startCheckout();
+    if (e.target.closest('#billingBtn')) return openBilling();
 
     const seg = e.target.closest('.seg');
     if (seg) return switchCategory(seg.dataset.cat);
@@ -791,6 +954,8 @@ async function init() {
   state.ramCapacities = boot.ramCapacities || [16, 24, 32, 48, 64, 96, 128];
   state.gpuVram = boot.gpuVram || [8, 12, 16, 24, 32];
   state.sources = boot.sources;
+  state.account = boot.account || null;
+  state.freeMaxGB = boot.freeMaxGB || null;
 
   buildChips();
   applyDefaults();
