@@ -30,9 +30,14 @@ async function closeBrowser() {
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
+const { withDefaults } = require('../stock');
+
 /** Renders each of a job's listing pages and extracts product cards. */
 async function fetchWithPlaywright(job) {
-  const sel = job.selectors;
+  // Resolved here, in Node — extractInPage runs as a serialized function with
+  // no module access, so a source with no outOfStockRe must not default to
+  // "always in stock" once it reaches the page context.
+  const sel = { ...job.selectors, outOfStockRe: withDefaults(job.selectors.outOfStockRe) };
   const out = [];
   const browser = await getBrowser();
 

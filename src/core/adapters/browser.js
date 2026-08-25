@@ -1,5 +1,7 @@
 'use strict';
 
+const { withDefaults } = require('../stock');
+
 /**
  * Renders a shop page inside a hidden Electron BrowserWindow and extracts
  * product cards from the live DOM.
@@ -10,7 +12,10 @@
  */
 async function fetchBrowser(source, deps) {
   const { BrowserWindow } = deps;
-  const sel = source.selectors;
+  // A source with no outOfStockRe must still catch the common "Enquire" /
+  // "Notify me" / "Coming soon" cases rather than default to always in-stock —
+  // resolved here, in Node, since the in-page script below has no module access.
+  const sel = { ...source.selectors, outOfStockRe: withDefaults(source.selectors.outOfStockRe) };
   const out = [];
 
   for (const pathTpl of source.paths) {

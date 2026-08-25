@@ -3,6 +3,7 @@
 const cheerio = require('cheerio');
 const { get } = require('../http');
 const { parsePrice } = require('../money');
+const { NOT_BUYABLE_RE } = require('../stock');
 
 /**
  * Generic WooCommerce product-archive scraper.
@@ -46,11 +47,20 @@ async function fetchWoo(source) {
         const href = $c.find('a.woocommerce-LoopProduct-link, a.woocommerce-loop-product__link, h2 a, a').first().attr('href');
         const title = titleFrom(rawTitle, href);
 
+        // The standard `outofstock` class covers Woo's own status; a shop
+        // that customises the button to "Enquire" or "Notify me" without
+        // changing that status still needs catching by the visible text.
+        // The title is excluded from that check — a product legitimately
+        // named around one of those words must not be mistaken for its own
+        // stock status.
+        const bodyText = $c.text().replace(rawTitle, '');
+        const inStock = !/\boutofstock\b/.test(cls) && !NOT_BUYABLE_RE.test(bodyText);
+
         out.push({
           title,
           vendor: '',
           price,
-          inStock: !/\boutofstock\b/.test(cls),
+          inStock,
           url: absolute(source.base, href),
           sku: (cls.match(/post-(\d+)/) || [])[1] || title,
           image: $c.find('img').first().attr('src') || null

@@ -4,6 +4,7 @@ const cheerio = require('cheerio');
 const { get } = require('../http');
 const { parsePrice } = require('../money');
 const { absolute } = require('./woocommerce');
+const { withDefaults } = require('../stock');
 
 /**
  * Config-driven HTML scraper for shops that are neither Shopify nor WooCommerce.
@@ -40,10 +41,7 @@ async function fetchGeneric(source) {
 
         const href = $c.find(sel.link || 'a').first().attr('href');
         const stockBlob = sel.stock ? text($c, sel.stock) : ($c.attr('class') || '') + ' ' + ($c.html() || '').slice(0, 400);
-        const outOfStockRe = sel.outOfStockRe
-          ? new RegExp(sel.outOfStockRe, 'i')
-          : /out\s*of\s*stock|sold\s*out|hết hàng|สินค้าหมด|缺貨/i;
-        const outOfStock = outOfStockRe.test(stockBlob);
+        const outOfStock = new RegExp(withDefaults(sel.outOfStockRe), 'i').test(stockBlob);
 
         out.push({
           title,
