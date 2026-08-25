@@ -10,12 +10,20 @@ const { BRANDS } = require('./src/core/brands');
 const { GPU_MODELS, AIB_BRANDS } = require('./src/core/gpu');
 const { RAM_CAPACITIES, GPU_VRAM } = require('./src/core/normalize');
 
+/**
+ * Empty size lists mean "no size filter", which is what a first run should do.
+ *
+ * These used to default to [16, 32] / [16, 32, 48, 64], which silently hid
+ * every tracked product of any other capacity — a 96GB RTX PRO 6000 or a 24GB
+ * kit was filtered out before the user ever saw it, and looked like a scraping
+ * failure rather than a filter.
+ */
 const DEFAULT_SETTINGS = {
   autoRefreshMinutes: 30,
   refreshOnLaunch: true,
   countries: COUNTRIES.map((c) => c.code),
-  ramCapacities: [16, 32, 48, 64],
-  gpuVram: [16, 32]
+  ramCapacities: [],
+  gpuVram: []
 };
 
 let mainWindow = null;

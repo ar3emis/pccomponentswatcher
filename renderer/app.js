@@ -795,7 +795,9 @@ function toggleChip(kind, rawValue) {
 function applyDefaults() {
   const s = state.settings;
   state.filters.countries = new Set(s.countries || state.countries.map((c) => c.code));
-  state.filters.memory = new Set(isGpu() ? s.gpuVram || [16, 32] : s.ramCapacities || [16, 32, 48, 64]);
+  // `?? []` rather than `|| [...]`: an explicitly empty list means "no size
+  // filter" and must survive, or saved settings get silently overridden.
+  state.filters.memory = new Set(isGpu() ? s.gpuVram ?? [] : s.ramCapacities ?? []);
   state.filters.brands = new Set();
   state.filters.models = new Set();
   state.filters.vendors = new Set();
@@ -954,8 +956,11 @@ function wire() {
   });
 
   api.onRefreshState((s) => {
-    $('#refreshBtn').classList.toggle('busy', s.running);
-    $('#refreshBtn').disabled = s.running;
+    // Absent on the web build, which cannot scrape and so never refreshes.
+    if (refreshBtn) {
+      refreshBtn.classList.toggle('busy', s.running);
+      refreshBtn.disabled = s.running;
+    }
     if (s.running) {
       setStatus('busy', 'Fetching live prices…');
     } else if (s.ok === false) {

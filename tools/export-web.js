@@ -104,12 +104,14 @@ async function main() {
   const common = {
     generatedAt: snapshot.fetchedAt,
     freeMaxGB: FREE_MAX_GB,
+    // Empty size lists mean "no size filter" — see main.js. Defaulting to a
+    // subset would hide tracked products behind a filter nobody set.
     settings: {
       autoRefreshMinutes: 0,
       refreshOnLaunch: false,
       countries: COUNTRIES.map((c) => c.code),
-      ramCapacities: [16, 32, 48, 64],
-      gpuVram: [16, 32]
+      ramCapacities: [],
+      gpuVram: []
     },
     countries: COUNTRIES,
     categories: CATEGORIES,
