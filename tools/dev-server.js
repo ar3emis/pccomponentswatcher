@@ -54,23 +54,34 @@ const server = http.createServer((req, res) => {
   const setTier = qTier ? { 'Set-Cookie': `dev_tier=${qTier}; Path=/; Max-Age=86400; SameSite=Lax` } : {};
 
   if (url.pathname === '/api/me') {
+    const base = { priceUSD: 5, trialDays: 7, trial: null, admin: false, subscription: null };
     const accounts = {
-      anon: { signedIn: false, email: null, tier: 'anon', admin: false, subscription: null, priceUSD: 5 },
-      free: { signedIn: true, email: 'tester@gmail.com', tier: 'free', admin: false, subscription: null, priceUSD: 5 },
+      anon: { ...base, signedIn: false, email: null, tier: 'anon', fullAccess: false },
+      free: { ...base, signedIn: true, email: 'tester@gmail.com', tier: 'free', fullAccess: false },
+      trial: {
+        ...base,
+        signedIn: true,
+        email: 'newuser@gmail.com',
+        tier: 'trial',
+        fullAccess: true,
+        trial: { endsAt: Date.now() + 5 * 86400000, daysLeft: 5 }
+      },
       paid: {
+        ...base,
         signedIn: true,
         email: 'sameek4@gmail.com',
         tier: 'paid',
         admin: true,
-        subscription: { status: 'active', currentPeriodEnd: null, hasBilling: false },
-        priceUSD: 5
+        fullAccess: true,
+        subscription: { status: 'active', currentPeriodEnd: null, hasBilling: false }
       }
     };
     return sendJson(200, accounts[tier] || accounts.anon, setTier);
   }
 
   if (url.pathname === '/api/data') {
-    const file = tier === 'paid' ? 'data-full.json' : 'data-free.json';
+    // Trial sees exactly what a subscriber sees.
+    const file = tier === 'paid' || tier === 'trial' ? 'data-full.json' : 'data-free.json';
     const full = path.join(DATA, file);
     if (!fs.existsSync(full)) return sendJson(503, { error: `${file} not built — run npm run export-web` });
     return send(200, fs.readFileSync(full), { 'Content-Type': 'application/json; charset=utf-8', 'X-Tier': tier, ...setTier });
@@ -94,7 +105,8 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`dev server  http://localhost:${PORT}`);
-  console.log(`  /?tier=anon   signed out`);
-  console.log(`  /?tier=free   signed in, no subscription`);
-  console.log(`  /?tier=paid   subscriber`);
+  console.log(`  /?tier=anon    signed out`);
+  console.log(`  /?tier=trial   new account, 5 of 7 trial days left`);
+  console.log(`  /?tier=free    trial expired, no subscription`);
+  console.log(`  /?tier=paid    subscriber`);
 });

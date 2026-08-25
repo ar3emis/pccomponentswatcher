@@ -12,7 +12,7 @@
     "dist": "electron-builder --win nsis --x64",
     "export-web": "node tools/export-web.js",
     "dev-web": "node tools/dev-server.js",
-    "test": "node tools/test-tier-parity.js && node tools/test-crypto.mjs && node tools/test-payload.js && node tools/test-assets.js",
+    "test": "node tools/test-tier-parity.js && node tools/test-ui-tiers.js && node tools/test-crypto.mjs && node tools/test-payload.js && node tools/test-assets.js",
     "test:payload": "node tools/test-payload.js dist-data/data-full.json",
     "test:assets": "node tools/test-assets.js"
   },

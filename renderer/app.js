@@ -593,17 +593,24 @@ function renderAccount() {
     return;
   }
 
+
+  const days = a.trial ? a.trial.daysLeft : 0;
+
   const badge =
     a.tier === 'paid'
       ? `<span class="tier-badge tier-paid">${a.admin ? 'Full access' : 'Subscribed'}</span>`
-      : `<span class="tier-badge tier-free">Free</span>`;
+      : a.tier === 'trial'
+        ? `<span class="tier-badge tier-trial">Trial · ${days} day${days === 1 ? '' : 's'} left</span>`
+        : `<span class="tier-badge tier-free">Free</span>`;
 
   const action =
     a.tier === 'paid'
       ? a.admin
         ? ''
         : `<button class="link-btn" id="billingBtn">Manage billing</button>`
-      : `<button class="btn btn-primary btn-sm" id="upgradeBtn">Unlock all · $${a.priceUSD}/mo</button>`;
+      : `<button class="btn btn-primary btn-sm" id="upgradeBtn">${
+          a.tier === 'trial' ? 'Keep full access' : 'Unlock all'
+        } · $${a.priceUSD}/mo</button>`;
 
   host.innerHTML = `
     <div class="account">
@@ -620,24 +627,46 @@ function renderUpgradeBanner() {
   if (!host || !state.account) return;
 
   const a = state.account;
+  const max = state.freeMaxGB || 16;
+
+  if (a.tier === 'paid') {
+    host.classList.add('hidden');
+    return;
+  }
+
+  // During the trial nothing is locked, but the clock is worth showing.
+  if (a.tier === 'trial') {
+    const d = a.trial ? a.trial.daysLeft : 0;
+    host.classList.remove('hidden');
+    host.classList.add('banner-trial');
+    host.innerHTML = `
+      <div class="banner-text">
+        <strong>Free trial — ${d} day${d === 1 ? '' : 's'} left.</strong>
+        You have full access to every market and retailer. After that you keep
+        everything up to ${max}GB free.
+      </div>
+      <button class="btn btn-primary btn-sm" id="bannerUpgrade">Keep full access · $${a.priceUSD}/mo</button>`;
+    return;
+  }
+
+  host.classList.remove('banner-trial');
   const hidden = (state.snapshot && state.snapshot.lockedCount) || 0;
-  if (a.tier === 'paid' || !hidden) {
+  if (!hidden) {
     host.classList.add('hidden');
     return;
   }
 
   host.classList.remove('hidden');
-  const max = state.freeMaxGB || 16;
   host.innerHTML = `
     <div class="banner-text">
       <strong>${hidden} listings above ${max}GB are locked.</strong>
       You can see how cheap they get — but not which of the six markets has them.
-      ${a.signedIn ? '' : 'Sign in free to see every listing up to ' + max + 'GB.'}
+      ${a.signedIn ? '' : `Sign in for a free ${a.trialDays || 7}-day trial with full access.`}
     </div>
     ${
       a.signedIn
         ? `<button class="btn btn-primary btn-sm" id="bannerUpgrade">Unlock all · $${a.priceUSD}/mo</button>`
-        : `<button class="btn btn-primary btn-sm" id="bannerSignIn">Sign in with Google</button>`
+        : `<button class="btn btn-primary btn-sm" id="bannerSignIn">Start free ${a.trialDays || 7}-day trial</button>`
     }`;
 }
 

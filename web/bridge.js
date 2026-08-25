@@ -13,7 +13,7 @@
  */
 (function () {
   let payload = null;
-  let account = { signedIn: false, tier: 'anon', email: null, priceUSD: 5 };
+  let account = { signedIn: false, tier: 'anon', email: null, priceUSD: 5, trial: null, trialDays: 7 };
 
   const noop = () => {};
 

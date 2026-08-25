@@ -31,13 +31,55 @@ check(
 const paidStatuses = (workerSrc.match(/PAID_STATUSES\s*=\s*new Set\(\[([^\]]*)\]/) || [])[1] || '';
 check('PAID_STATUSES include active + trialing', /active/.test(paidStatuses) && /trialing/.test(paidStatuses), paidStatuses);
 
+const trialDays = Number((workerSrc.match(/TRIAL_DAYS\s*=\s*(\d+)/) || [])[1]);
+check('TRIAL_DAYS matches', trialDays === node.TRIAL_DAYS, `worker=${trialDays} node=${node.TRIAL_DAYS}`);
+
 // Behavioural spot-checks on the Node copy.
-const { tierFor, TIERS } = node;
+const { tierFor, TIERS, hasFullAccess, TRIAL_DAYS } = node;
+const DAY = 86400 * 1000;
+const ago = (days) => Date.now() - days * DAY;
 check('anonymous visitor is anon', tierFor(null, null) === TIERS.ANON);
-check('signed-in with no subscription is free', tierFor({ email: 'a@b.com' }, null) === TIERS.FREE);
+check('signed-in with no subscription and no created_at is free', tierFor({ email: 'a@b.com' }, null) === TIERS.FREE);
 check('active subscriber is paid', tierFor({ email: 'a@b.com' }, { status: 'active' }) === TIERS.PAID);
 check('admin is paid without subscription', tierFor({ email: 'sameek4@gmail.com' }, null) === TIERS.PAID);
 check('admin match is case-insensitive', tierFor({ email: 'Sameek4@Gmail.com' }, null) === TIERS.PAID);
+
+// ── Trial ────────────────────────────────────────────────────────────────
+const fresh = { email: 'new@b.com', created_at: Date.now() };
+check('a brand-new account is on trial', tierFor(fresh, null) === TIERS.TRIAL);
+check('day 6 of the trial is still trial', tierFor({ email: 'n@b.com', created_at: ago(6) }, null) === TIERS.TRIAL);
+check(
+  `day ${TRIAL_DAYS} exactly has expired`,
+  tierFor({ email: 'n@b.com', created_at: ago(TRIAL_DAYS) }, null) === TIERS.FREE
+);
+check('day 8 has expired to free', tierFor({ email: 'n@b.com', created_at: ago(8) }, null) === TIERS.FREE);
+check('trial has full access', hasFullAccess(TIERS.TRIAL) === true);
+check('paid has full access', hasFullAccess(TIERS.PAID) === true);
+check('free does not have full access', hasFullAccess(TIERS.FREE) === false);
+check('anon does not have full access', hasFullAccess(TIERS.ANON) === false);
+check('subscribing during the trial reports as paid, not trial', tierFor(fresh, { status: 'active' }) === TIERS.PAID);
+check(
+  'an expired trial with an active subscription is paid',
+  tierFor({ email: 'n@b.com', created_at: ago(30) }, { status: 'active' }) === TIERS.PAID
+);
+check(
+  'an expired trial with a past_due subscription is free',
+  tierFor({ email: 'n@b.com', created_at: ago(30) }, { status: 'past_due' }) === TIERS.FREE
+);
+check(
+  'a still-running trial with a past_due subscription stays on trial',
+  tierFor({ email: 'n@b.com', created_at: ago(2) }, { status: 'past_due' }) === TIERS.TRIAL
+);
+// created_at is stamped server-side, so a future value means clock skew rather
+// than tampering; treating it as an in-progress trial is the harmless reading.
+check('a future created_at still resolves to trial, not an error', tierFor({ email: 'n@b.com', created_at: ago(-3) }, null) === TIERS.TRIAL);
+check('a zero created_at is treated as unknown, not epoch-trial', tierFor({ email: 'n@b.com', created_at: 0 }, null) === TIERS.FREE);
+check('a null created_at is treated as unknown', tierFor({ email: 'n@b.com', created_at: null }, null) === TIERS.FREE);
+check(
+  'trialEndsAt is exactly TRIAL_DAYS after creation',
+  node.trialEndsAt({ created_at: 1000 }) === 1000 + TRIAL_DAYS * DAY
+);
+check('trialEndsAt is null when creation is unknown', node.trialEndsAt({}) === null);
 check(
   'cancelled but still inside paid period is paid',
   tierFor({ email: 'a@b.com' }, { status: 'canceled', current_period_end: Math.floor(Date.now() / 1000) + 86400 }) === TIERS.PAID

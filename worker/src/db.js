@@ -3,25 +3,45 @@
 export function makeDb(d1) {
   return {
     async upsertUser(email, googleSub) {
-      const existing = await d1.prepare('SELECT id, email FROM users WHERE email = ?').bind(email).first();
+      // created_at is never rewritten for an existing user: the trial is derived
+      // from it, so touching it here would hand out a fresh trial on every login.
+      const existing = await d1.prepare('SELECT id, email, created_at FROM users WHERE email = ?').bind(email).first();
       if (existing) {
         if (googleSub) await d1.prepare('UPDATE users SET google_sub = ? WHERE id = ?').bind(googleSub, existing.id).run();
         return existing;
       }
       const id = crypto.randomUUID();
+      const now = Date.now();
       await d1
         .prepare('INSERT INTO users (id, email, google_sub, created_at) VALUES (?, ?, ?, ?)')
-        .bind(id, email, googleSub || null, Date.now())
+        .bind(id, email, googleSub || null, now)
         .run();
-      return { id, email };
+      return { id, email, created_at: now };
     },
 
     getUserById(id) {
-      return d1.prepare('SELECT id, email FROM users WHERE id = ?').bind(id).first();
+      return d1.prepare('SELECT id, email, created_at FROM users WHERE id = ?').bind(id).first();
     },
 
     getUserByEmail(email) {
-      return d1.prepare('SELECT id, email FROM users WHERE email = ?').bind(email).first();
+      return d1.prepare('SELECT id, email, created_at FROM users WHERE email = ?').bind(email).first();
+    },
+
+    /**
+     * User row plus subscription in one round trip. Both are needed on every
+     * request that returns data, and the trial depends on users.created_at.
+     */
+    getAccount(userId) {
+      return d1
+        .prepare(
+          `SELECT u.id, u.email, u.created_at,
+                  s.stripe_customer_id, s.stripe_sub_id, s.status, s.current_period_end
+           FROM users u
+           LEFT JOIN subscriptions s ON s.user_id = u.id
+           WHERE u.id = ?`
+        )
+        .bind(userId)
+        .first();
     },
 
     getSubscription(userId) {

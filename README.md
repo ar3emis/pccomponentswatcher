@@ -67,11 +67,22 @@ access level can be seen without Google or Stripe configured.
 
 ### Access control
 
-The site is free up to **16 GB** — memory kits and graphics cards alike. Above
-that, a listing's *price range* is public but **which market and retailer has
-it** requires a $5/month subscription. That split is deliberate: the aggregation
-across six markets is the thing worth paying for, so revealing the retailer
-would give the whole product away.
+Signing in with Google starts a **7-day free trial** with full access. After it
+ends the site stays free up to **16 GB** — memory kits and graphics cards alike.
+Above that, a listing's *price range* is public but **which market and retailer
+has it** requires a $5/month subscription. That split is deliberate: the
+aggregation across six markets is the thing worth paying for, so revealing the
+retailer would give the whole product away.
+
+| Tier | Sees |
+|---|---|
+| Signed out | Listings ≤16 GB |
+| Trial (7 days from first sign-in) | Everything |
+| Free (trial expired) | Listings ≤16 GB |
+| Subscribed — $5/month | Everything |
+
+The trial is derived from `users.created_at`, not stored separately, so it
+cannot drift, cannot be restarted by signing out, and needs no cleanup job.
 
 Two payloads are built at scrape time and stored separately:
 

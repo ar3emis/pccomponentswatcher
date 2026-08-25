@@ -38,6 +38,7 @@ jobs:
       - name: Verify access rules and signature handling
         run: |
           node tools/test-tier-parity.js
+          node tools/test-ui-tiers.js
           node tools/test-crypto.mjs
 
       - name: Install Chromium for the browser-only retailers

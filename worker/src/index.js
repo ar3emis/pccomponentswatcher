@@ -11,7 +11,7 @@
 import { startLogin, finishLogin, logout, currentUser } from './auth.js';
 import { makeDb } from './db.js';
 import { createCheckout, createPortal, verifyWebhook, applyWebhookEvent } from './stripe.js';
-import { tierFor, TIERS, isAdminEmail } from './tiers.js';
+import { tierFor, TIERS, isAdminEmail, hasFullAccess, trialEndsAt, TRIAL_DAYS } from './tiers.js';
 
 const json = (body, status = 200, headers = {}) =>
   new Response(JSON.stringify(body), {
@@ -48,23 +48,51 @@ export default {
   }
 };
 
-/** Resolves the caller's identity and entitlement in one place. */
+/**
+ * Resolves the caller's identity and entitlement in one place.
+ *
+ * The session cookie proves who the caller is but carries no entitlement — the
+ * trial window and subscription status are read from the database on every
+ * request, so a cancellation or an expiring trial takes effect immediately
+ * rather than whenever the cookie happens to expire.
+ */
 async function resolveAccess(request, env) {
-  const user = await currentUser(request, env);
-  if (!user) return { user: null, tier: TIERS.ANON, subscription: null };
-  const db = makeDb(env.DB);
-  const subscription = await db.getSubscription(user.id);
+  const session = await currentUser(request, env);
+  if (!session) return { user: null, tier: TIERS.ANON, subscription: null };
+
+  const row = await makeDb(env.DB).getAccount(session.id);
+  if (!row) return { user: null, tier: TIERS.ANON, subscription: null };
+
+  const user = { id: row.id, email: row.email, created_at: row.created_at };
+  const subscription = row.status
+    ? {
+        status: row.status,
+        current_period_end: row.current_period_end,
+        stripe_customer_id: row.stripe_customer_id
+      }
+    : row.stripe_customer_id
+      ? { status: null, current_period_end: null, stripe_customer_id: row.stripe_customer_id }
+      : null;
+
   return { user, subscription, tier: tierFor(user, subscription) };
 }
 
 async function handleMe(request, env) {
   const { user, tier, subscription } = await resolveAccess(request, env);
+  const trialEnds = user ? trialEndsAt(user) : null;
+
   return json({
     signedIn: !!user,
     email: user?.email || null,
     tier,
     admin: !!user && isAdminEmail(user.email),
-    subscription: subscription
+    fullAccess: hasFullAccess(tier),
+    trial:
+      tier === TIERS.TRIAL && trialEnds
+        ? { endsAt: trialEnds, daysLeft: Math.max(0, Math.ceil((trialEnds - Date.now()) / 86400000)) }
+        : null,
+    trialDays: TRIAL_DAYS,
+    subscription: subscription?.status
       ? { status: subscription.status, currentPeriodEnd: subscription.current_period_end, hasBilling: !!subscription.stripe_customer_id }
       : null,
     priceUSD: 5
@@ -73,7 +101,7 @@ async function handleMe(request, env) {
 
 async function handleData(request, env) {
   const { tier } = await resolveAccess(request, env);
-  const key = tier === TIERS.PAID ? 'data:full' : 'data:free';
+  const key = hasFullAccess(tier) ? 'data:full' : 'data:free';
 
   const body = await env.DATA.get(key, 'stream');
   if (!body) return json({ error: 'no data published yet' }, 503);

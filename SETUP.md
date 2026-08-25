@@ -21,9 +21,15 @@ Work through the sections in order — later ones need values from earlier ones.
 
 The access rule lives in `src/core/tiers.js`:
 
-- Not signed in, or signed in without a subscription → listings **≤ 16 GB**
+- Not signed in → listings **≤ 16 GB**
+- First 7 days after signing in → **everything** (free trial)
+- Trial over, no subscription → listings **≤ 16 GB**
 - Subscriber → everything
 - `sameek4@gmail.com` → everything, no subscription needed
+
+The trial is measured from `users.created_at`, so signing out and back in does
+not restart it. To change its length, edit `TRIAL_DAYS` in **both**
+`src/core/tiers.js` and `worker/src/tiers.js` — `npm test` fails if they differ.
 
 ---
 
@@ -157,10 +163,21 @@ Then run it once by hand: **Actions → Publish price site → Run workflow**.
    rows above that.
 2. Open DevTools → Network → `/api/data`. Confirm the response contains **no**
    listing above 16 GB. This is the check that actually matters.
-3. Sign in with a non-admin Google account — still capped at 16 GB.
-4. Subscribe with the test card — the page should unlock after Stripe redirects
-   back.
+3. Sign in with a non-admin Google account — the trial banner should appear and
+   everything unlocks for 7 days.
+4. Subscribe with the test card — the badge should change from "Trial" to
+   "Subscribed" after Stripe redirects back.
 5. Sign in as `sameek4@gmail.com` — full access with no subscription.
+
+To see the expired-trial state without waiting a week, backdate the account:
+
+```bash
+cd worker
+wrangler d1 execute pcw-db --remote \
+  --command "UPDATE users SET created_at = created_at - 8*86400000 WHERE email = 'you@gmail.com'"
+```
+
+Reload — the account should now read "Free" and lock everything above 16 GB.
 
 `npm test` runs the same guarantees locally and in CI:
 
