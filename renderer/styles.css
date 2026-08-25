@@ -160,12 +160,22 @@ body { display: flex; flex-direction: column; }
 .upgrade-banner.banner-trial strong { color: var(--warn); }
 
 /* Locked rows: priced, but never located. */
+/* A locked row must read as locked everywhere, not just in the cell that names
+   the paywall — otherwise brand, size, spec and price cells look identical to
+   a real, browsable listing and only the retailer column looks restricted. */
 tr.row-locked { background: rgba(139, 152, 173, 0.04); }
 tr.row-locked:hover { background: rgba(139, 152, 173, 0.08); }
-tr.row-locked .locked-title { color: var(--text-dim); }
+tr.row-locked td { color: var(--text-faint); }
+tr.row-locked .brand-cell.brand-t1,
+tr.row-locked .brand-cell.brand-t2 { color: var(--text-faint); font-weight: 600; }
+tr.row-locked .cell-sub { color: var(--text-faint); opacity: 0.75; }
+tr.row-locked .locked-title { color: var(--text-faint); }
+tr.row-locked .locked-price { font-style: italic; }
+/* The one actionable thing in the row must still read as actionable. */
+tr.row-locked .unlock-btn { color: var(--accent); }
+tr.row-locked .unlock-btn:hover { color: #7db8ff; }
 .locked-cell { white-space: nowrap; }
-.lock-ico { margin-right: 6px; opacity: 0.75; font-size: 11px; }
-.locked-price { color: var(--text-dim); font-style: italic; }
+.lock-ico { margin-right: 6px; opacity: 0.6; font-size: 11px; }
 
 /* ── Dropdown multi-select (Brand / Model) ─────────────────────────────── */
 .dropdown { position: relative; min-width: 170px; }

@@ -253,12 +253,11 @@ function lockedRowsHtml(locked, gpu) {
           : `${fmtINR(l.minPriceINR)} – ${fmtINR(l.maxPriceINR)}`;
 
       return `<tr class="row-locked">
-        <td class="brand-cell ${tierCls}">${escapeHtml(l.brandName)}</td>
+        <td class="brand-cell ${tierCls}"><span class="lock-ico" aria-hidden="true">🔒</span>${escapeHtml(l.brandName)}</td>
         <td><span class="locked-title">${escapeHtml(l.title)}</span></td>
         <td class="num">${sizeCell}</td>
         ${specCells}
         <td class="locked-cell" colspan="2">
-          <span class="lock-ico" aria-hidden="true">🔒</span>
           <button class="link-btn unlock-btn">Unlock ${l.marketCount} market${l.marketCount === 1 ? '' : 's'}</button>
         </td>
         <td class="num cell-empty">—</td>
