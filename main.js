@@ -19,12 +19,38 @@ const { RAM_CAPACITIES, GPU_VRAM } = require('./src/core/normalize');
  * failure rather than a filter.
  */
 const DEFAULT_SETTINGS = {
+  settingsVersion: 2,
   autoRefreshMinutes: 30,
   refreshOnLaunch: true,
   countries: COUNTRIES.map((c) => c.code),
   ramCapacities: [],
   gpuVram: []
 };
+
+/** The size filters version 1 shipped as defaults, which nobody chose. */
+const V1_DEFAULT_RAM = [16, 32, 48, 64];
+const V1_DEFAULT_VRAM = [16, 32];
+
+const sameList = (a, b) => Array.isArray(a) && a.length === b.length && b.every((v, i) => a[i] === v);
+
+/**
+ * Clears the version-1 size filters from an existing profile.
+ *
+ * Those values were written to disk as defaults, not chosen, and a stored
+ * setting outranks a default — so simply changing DEFAULT_SETTINGS would leave
+ * every existing install still hiding 96GB cards. Only lists that still match
+ * the old defaults exactly are cleared, so a deliberate selection survives.
+ */
+function migrateSettings(store) {
+  const s = store.getSettings();
+  if (!Object.keys(s).length) return store.setSettings(DEFAULT_SETTINGS);
+  if (Number(s.settingsVersion) >= 2) return;
+
+  const patch = { settingsVersion: 2 };
+  if (sameList(s.ramCapacities, V1_DEFAULT_RAM)) patch.ramCapacities = [];
+  if (sameList(s.gpuVram, V1_DEFAULT_VRAM)) patch.gpuVram = [];
+  store.setSettings(patch);
+}
 
 let mainWindow = null;
 let store = null;
@@ -110,7 +136,7 @@ function scheduleAutoRefresh() {
 
 app.whenReady().then(() => {
   store = new Store(app.getPath('userData'));
-  if (!Object.keys(store.getSettings()).length) store.setSettings(DEFAULT_SETTINGS);
+  migrateSettings(store);
 
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
