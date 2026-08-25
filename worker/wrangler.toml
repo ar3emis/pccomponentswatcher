@@ -10,12 +10,12 @@ binding = "ASSETS"
 # Published price payloads: data:free and data:full.
 [[kv_namespaces]]
 binding = "DATA"
-id = "PLACEHOLDER_KV_ID"
+id = "478a8cd8718345c1979bdc06c6ccb1a9"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "pcw-db"
-database_id = "PLACEHOLDER_D1_ID"
+database_id = "8e157508-8b98-4b80-b7b3-04ab1f94a526"
 
 # Secrets are NOT set here — they would end up in git. Set each one with:
 #   npx wrangler secret put GOOGLE_CLIENT_ID
