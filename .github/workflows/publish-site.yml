@@ -53,7 +53,20 @@ jobs:
       - name: Verify no payload sits in the public asset root
         run: npm run test:assets
 
+      # Until Cloudflare is configured (see SETUP.md) the scrape and the
+      # access-control tests still run and report; only publishing is skipped.
+      - name: Check whether Cloudflare is configured
+        id: cf
+        run: |
+          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ] && [ -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Cloudflare secrets are not set — built and tested, but not published. See SETUP.md.'
+          fi
+
       - name: Upload payloads to KV
+        if: steps.cf.outputs.ready == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -63,6 +76,7 @@ jobs:
           npx wrangler kv key put data:full --path ../dist-data/data-full.json --binding DATA --remote
 
       - name: Deploy the Worker and static assets
+        if: steps.cf.outputs.ready == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
