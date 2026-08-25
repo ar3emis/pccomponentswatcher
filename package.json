@@ -1,0 +1,48 @@
+{
+  "name": "pccomponentswatcher",
+  "productName": "PCComponentsWatcher",
+  "version": "1.0.0",
+  "description": "Real-time DDR5 memory and graphics-card prices across India, Malaysia, Vietnam, Thailand, Hong Kong and Singapore",
+  "main": "main.js",
+  "author": "Sameek Kundu",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "probe": "node tools/probe.js",
+    "dist": "electron-builder --win nsis --x64",
+    "export-web": "node tools/export-web.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "electron": "^41.5.0",
+    "electron-builder": "^25.1.8",
+    "playwright": "^1.62.1"
+  },
+  "build": {
+    "appId": "com.sameek.pccomponentswatcher",
+    "productName": "PCComponentsWatcher",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PCComponentsWatcher"
+    }
+  }
+}

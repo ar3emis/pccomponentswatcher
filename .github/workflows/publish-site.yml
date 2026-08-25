@@ -1,0 +1,65 @@
+name: Publish price site
+
+on:
+  schedule:
+    # Every six hours. Times are UTC.
+    - cron: '20 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'data/**'
+
+# Allow one publish at a time; a queued run picks up the newer prices anyway.
+concurrency:
+  group: publish-site
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chromium for the browser-only retailers
+        run: npx playwright install --with-deps chromium
+
+      - name: Scrape prices and build the site
+        run: npm run export-web
+
+      # History lives in the repo so trend lines survive between runs.
+      - name: Commit refreshed price history
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add data/history.json
+          git diff --staged --quiet || git commit -m 'chore: refresh price history'
+          git push
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

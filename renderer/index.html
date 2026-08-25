@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'" />
+  <title>PCComponentsWatcher</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">PC</div>
+      <div class="brand-text">
+        <h1>PCComponentsWatcher</h1>
+        <p>Live in-stock DDR5 memory and GPU prices across six Asian markets</p>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div id="fxStrip" class="fx-strip" title="Live mid-market rates used for INR conversion"></div>
+      <div id="statusPill" class="pill pill-idle">Starting…</div>
+      <button id="refreshBtn" class="btn btn-primary">
+        <span class="btn-spinner" aria-hidden="true"></span>
+        <span class="btn-label">Refresh</span>
+      </button>
+    </div>
+  </header>
+
+  <div id="progressBar" class="progress"><div class="progress-fill"></div></div>
+
+  <section class="filters">
+    <div class="filter-group">
+      <label>Product</label>
+      <div id="categorySwitch" class="segmented">
+        <button class="seg seg-on" data-cat="ram">DDR5 memory</button>
+        <button class="seg" data-cat="gpu">Graphics cards</button>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <label>Country</label>
+      <div id="countryChips" class="chips"></div>
+    </div>
+
+    <div class="filter-group">
+      <label id="memoryLabel">Kit size</label>
+      <div id="capacityChips" class="chips"></div>
+    </div>
+
+    <div class="filter-group gpu-only hidden">
+      <label>Vendor</label>
+      <div id="vendorChips" class="chips"></div>
+    </div>
+
+    <div class="filter-group gpu-only hidden">
+      <label>Model</label>
+      <div class="dropdown" id="modelDropdown">
+        <button type="button" class="dropdown-btn" id="modelDropdownBtn">All models</button>
+        <div id="modelChips" class="dropdown-panel hidden"></div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <label>Brand</label>
+      <div class="dropdown" id="brandDropdown">
+        <button type="button" class="dropdown-btn" id="brandDropdownBtn">All brands</button>
+        <div id="brandChips" class="dropdown-panel hidden"></div>
+      </div>
+    </div>
+
+    <div class="filter-group filter-group-narrow ram-only">
+      <label>Form factor</label>
+      <select id="formSelect">
+        <option value="DIMM">Desktop (DIMM)</option>
+        <option value="SODIMM">Laptop (SODIMM)</option>
+        <option value="all">Both</option>
+      </select>
+    </div>
+
+    <div class="filter-group filter-group-narrow">
+      <label>View</label>
+      <select id="bestSelect">
+        <option value="all">Every listing</option>
+        <option value="country">Best price per country</option>
+        <option value="product">Best price per product</option>
+      </select>
+    </div>
+
+    <div class="filter-group filter-group-grow">
+      <label>Search</label>
+      <input id="searchInput" type="search" placeholder="e.g. Vengeance 6000 CL30" />
+    </div>
+
+    <div class="filter-group filter-group-narrow">
+      <label>&nbsp;</label>
+      <button id="resetBtn" class="btn btn-ghost">Reset</button>
+    </div>
+  </section>
+
+  <nav class="tabs">
+    <button class="tab tab-active" data-tab="table">Price table</button>
+    <button class="tab" data-tab="compare">Country comparison</button>
+    <button class="tab" data-tab="charts">Charts</button>
+    <button class="tab" data-tab="sources">Sources &amp; health</button>
+    <div class="tabs-meta"><span id="resultCount"></span><span id="lastUpdated"></span></div>
+  </nav>
+
+  <main>
+    <!-- Price table -->
+    <section id="view-table" class="view view-active">
+      <div class="table-wrap">
+        <table class="grid" id="priceTable">
+          <thead>
+            <tr>
+              <th data-sort="brandName" class="sortable">Brand</th>
+              <th data-sort="title" class="sortable col-wide">Product</th>
+              <th data-sort="memoryGB" class="sortable num" id="thMemory">Kit</th>
+              <th data-sort="speed" class="sortable num ram-only" id="thSpeed">Speed</th>
+              <th data-sort="cas" class="sortable num ram-only" id="thCas">CL</th>
+              <th data-sort="modelName" class="sortable gpu-only hidden" id="thModel">GPU model</th>
+              <th data-sort="countryName" class="sortable">Country</th>
+              <th data-sort="sourceName" class="sortable">Retailer</th>
+              <th data-sort="price" class="sortable num">Local price</th>
+              <th data-sort="priceINR" class="sortable num sorted-asc">Price (₹)</th>
+              <th data-sort="pricePerGBINR" class="sortable num" id="thPerGB">₹ / GB</th>
+              <th class="num">30-day trend</th>
+            </tr>
+          </thead>
+          <tbody id="priceBody"></tbody>
+        </table>
+      </div>
+      <div id="tableEmpty" class="empty hidden"></div>
+    </section>
+
+    <!-- Country comparison pivot -->
+    <section id="view-compare" class="view">
+      <div class="view-head">
+        <div>
+          <h2>Same product, every market</h2>
+          <p id="compareBlurb">Best in-stock price per country, converted to INR at today's rate. Green marks the cheapest market.</p>
+        </div>
+        <label class="inline-check">
+          <input type="checkbox" id="compareCompleteOnly" />
+          <span>Only items sold in 3+ countries</span>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="compareTable">
+          <thead id="compareHead"></thead>
+          <tbody id="compareBody"></tbody>
+        </table>
+      </div>
+      <div id="compareEmpty" class="empty hidden"></div>
+    </section>
+
+    <!-- Charts -->
+    <section id="view-charts" class="view">
+      <div class="chart-grid">
+        <div class="card card-wide">
+          <div class="card-head">
+            <h3>Cheapest price by country</h3>
+            <div class="card-controls">
+              <select id="chartCapacity"></select>
+            </div>
+          </div>
+          <div id="chartCountry" class="chart"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Cost per GB by country</h3></div>
+          <div id="chartPerGB" class="chart"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3 id="brandChartTitle">Cheapest by brand (₹ / GB)</h3></div>
+          <div id="chartBrand" class="chart"></div>
+        </div>
+
+        <div class="card card-wide">
+          <div class="card-head">
+            <h3>Price history</h3>
+            <div class="card-controls">
+              <select id="chartHistoryMode">
+                <option value="country">Market average (₹ / GB)</option>
+                <option value="listing">Single listing</option>
+              </select>
+              <select id="chartHistoryListing" class="hidden"></select>
+            </div>
+          </div>
+          <div id="chartHistory" class="chart chart-tall"></div>
+          <p class="chart-note" id="historyNote"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sources -->
+    <section id="view-sources" class="view">
+      <div class="view-head">
+        <div>
+          <h2>Where the numbers come from</h2>
+          <p>Every price is read live from the retailer's own listing page, per product variant. A failed source is reported here rather than hidden.</p>
+        </div>
+        <button id="revealBtn" class="btn btn-ghost">Show data file</button>
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="sourceTable">
+          <thead>
+            <tr>
+              <th>Status</th><th>Country</th><th>Retailer</th><th>Method</th>
+              <th class="num">Listings found</th><th class="num">Tracked</th><th class="num">Time</th><th class="col-wide">Detail</th>
+            </tr>
+          </thead>
+          <tbody id="sourceBody"></tbody>
+        </table>
+      </div>
+
+      <div class="settings-card">
+        <h3>Settings</h3>
+        <label class="setting-row">
+          <span>Auto-refresh every</span>
+          <select id="intervalSelect">
+            <option value="0">Off</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+            <option value="180">3 hours</option>
+            <option value="360">6 hours</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span>Refresh automatically when the app opens</span>
+          <input type="checkbox" id="launchRefresh" />
+        </label>
+        <p class="muted" id="storeStats"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="charts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
