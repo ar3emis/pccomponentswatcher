@@ -6,6 +6,19 @@ scheduled workflow takes over and you shouldn't need to touch it again.
 
 Work through the sections in order — later ones need values from earlier ones.
 
+**Status as of 2026-08-25: sections 1, 2 and 5 are done. Only Stripe (section 3)
+and the last two secrets in section 4 are left.** The site is live at
+<https://pccomponentswatcher.sameek4.workers.dev> — signed out it correctly
+shows ≤16GB listings with the rest locked, and signing in as `sameek4@gmail.com`
+correctly gets full access as the admin account. What's still missing:
+
+- The Google OAuth consent screen is in **Testing** mode, so only
+  `sameek4@gmail.com` (added as a test user) can sign in. Publishing it to let
+  any visitor sign in needs a privacy policy — see "Before charging real money"
+  below — filled in on the Branding page, then Audience → Publish app.
+- Stripe was skipped entirely: no product, no webhook, no keys. Sign-in and the
+  trial work today; subscribing does not.
+
 ---
 
 ## 0. What you're setting up
@@ -33,58 +46,30 @@ not restart it. To change its length, edit `TRIAL_DAYS` in **both**
 
 ---
 
-## 1. Cloudflare
+## 1. Cloudflare — done
 
-Sign up at <https://dash.cloudflare.com/sign-up>, then from the repo root:
-
-```bash
-npm install -g wrangler
-wrangler login
-```
-
-Create the two stores:
-
-```bash
-cd worker
-wrangler kv namespace create DATA
-wrangler d1 create pcw-db
-```
-
-Each command prints an `id`. Put them into `worker/wrangler.toml`, replacing
-`PLACEHOLDER_KV_ID` and `PLACEHOLDER_D1_ID`.
-
-Create the tables:
-
-```bash
-wrangler d1 execute pcw-db --remote --file schema.sql
-```
-
-Do a first deploy so the Worker gets a URL:
-
-```bash
-cd .. && npm run export-web && cd worker && wrangler deploy
-```
-
-Note the URL it prints — something like
-`https://pccomponentswatcher.<your-subdomain>.workers.dev`. **Everything below
-calls this `<SITE_URL>`.**
+`<SITE_URL>` is <https://pccomponentswatcher.sameek4.workers.dev>. The `DATA`
+KV namespace and `pcw-db` D1 database exist, their ids are in
+`worker/wrangler.toml`, `schema.sql` has been applied, and the Worker is
+deployed and serving the gated `/api/data` correctly. Nothing to do here unless
+you want to move to a custom domain instead of `*.workers.dev`.
 
 ---
 
-## 2. Google sign-in
+## 2. Google sign-in — done, but still in Testing
 
-1. Open <https://console.cloud.google.com/> and create a project.
-2. **APIs & Services → OAuth consent screen**
-   - User type: **External**, then Publish it (while in "Testing" only accounts
-     you list by hand can sign in).
-   - Scopes: `openid` and `email` are enough. Don't request more — extra scopes
-     trigger Google's verification review.
-3. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
-   - Type: **Web application**
-   - Authorised JavaScript origin: `<SITE_URL>`
-   - Authorised redirect URI: `<SITE_URL>/auth/callback` — must match exactly,
-     including `https://` and no trailing slash.
-4. Copy the **Client ID** and **Client secret**.
+The OAuth client exists (project `pccomponentswatcher`), `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` are set as Worker secrets, and signing in works. It's
+deliberately left in **Testing** mode rather than published — publishing needs
+a privacy policy link on the Branding page, which is a legal document, not
+something to fill in with a placeholder. Right now only emails you add under
+**Google Auth Platform → Audience → Test users** can sign in (100 max,
+`sameek4@gmail.com` is already one). To let anyone sign in:
+
+1. Write a real privacy policy and terms page and host them somewhere.
+2. **Google Auth Platform → Branding** → fill in the app home page and privacy
+   policy link.
+3. **Google Auth Platform → Audience** → **Publish app**.
 
 ---
 
@@ -110,29 +95,18 @@ keys are the `sk_test_…` ones.
 
 ---
 
-## 4. Worker secrets
+## 4. Worker secrets — Google and session done, Stripe left
 
-From `worker/`, run each and paste the value when prompted:
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `SESSION_SECRET` are already set
+(the last one was machine-generated and never written anywhere, including
+here). Once section 3 gives you Stripe's values, from `worker/` run each and
+paste the value when prompted:
 
 ```bash
-wrangler secret put GOOGLE_CLIENT_ID
-wrangler secret put GOOGLE_CLIENT_SECRET
-wrangler secret put SESSION_SECRET
 wrangler secret put STRIPE_SECRET_KEY
 wrangler secret put STRIPE_PRICE_ID
 wrangler secret put STRIPE_WEBHOOK_SECRET
 ```
-
-Generate `SESSION_SECRET` yourself and paste the output — never reuse one from
-a document, this repo included, since anyone holding it can forge a session
-cookie for any account:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-```
-
-Changing `SESSION_SECRET` later signs everyone out; nothing else breaks. If you
-ever suspect it leaked, rotating it is the fix.
 
 Redeploy so the secrets take effect:
 
@@ -140,20 +114,20 @@ Redeploy so the secrets take effect:
 wrangler deploy
 ```
 
+(If you ever need to rotate `SESSION_SECRET`, generate a fresh one yourself —
+`node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`
+— and `wrangler secret put SESSION_SECRET`. That signs everyone out; nothing
+else breaks.)
+
 ---
 
-## 5. GitHub Actions
+## 5. GitHub Actions — done
 
-The workflow scrapes every six hours, then uploads and deploys. It needs two
-repository secrets — **Settings → Secrets and variables → Actions → New
-repository secret**:
-
-| Secret | Where to get it |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare dash → My Profile → API Tokens → Create Token → *Edit Cloudflare Workers* template |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dash → Workers & Pages → right-hand sidebar |
-
-Then run it once by hand: **Actions → Publish price site → Run workflow**.
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set as repository
+secrets, and a manual run was kicked off to confirm the full pipeline (scrape →
+build → publish to KV → deploy) works unattended — check **Actions → Publish
+price site** for its result if you want to see it. Once green, the six-hourly
+schedule takes over on its own.
 
 ---
 
