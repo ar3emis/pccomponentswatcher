@@ -1,7 +1,7 @@
 # PCComponentsWatcher
 
-Tracks **live DDR5 memory and graphics-card prices** across six Asian markets
-and converts every price to INR at the day's rate.
+Tracks **live DDR5 memory and graphics-card prices** worldwide and converts
+every price to INR at the day's rate.
 
 Ships as a Windows desktop app and as a public website, both built from the
 same dashboard code.
@@ -9,7 +9,9 @@ same dashboard code.
 ## What it does
 
 - Scrapes retailer listing pages directly — no third-party price API sits in between.
-- Covers India, Singapore, Malaysia, Thailand, Vietnam and Hong Kong.
+- Covers real, verified retailers only: a country is added when a genuine
+  scrapeable storefront for it is found, not on the strength of the country
+  existing. See [Retailers covered](#retailers-covered).
 - Shows each price in the shop's own currency **and** in INR, using live mid-market rates.
 - Records price history locally, so trends build up the longer you run it.
 - Compares the same product across countries side by side, and charts the gaps.
@@ -71,8 +73,8 @@ Signing in with Google starts a **7-day free trial** with full access. After it
 ends the site stays free up to **16 GB** — memory kits and graphics cards alike.
 Above that, a listing's *price range* is public but **which market and retailer
 has it** requires a $5/month subscription. That split is deliberate: the
-aggregation across six markets is the thing worth paying for, so revealing the
-retailer would give the whole product away.
+aggregation across every tracked market is the thing worth paying for, so
+revealing the retailer would give the whole product away.
 
 | Tier | Sees |
 |---|---|
@@ -127,14 +129,22 @@ the **Sources & health** tab — the app never invents a price to fill a gap.
 
 ## Retailers covered
 
-| Country | Retailers |
-|---------|-----------|
-| India | MDComputers, PrimeABGB, Vedant Computers |
-| Singapore | Bizgram, Dynacore |
-| Malaysia | ALL IT Hypermarket |
-| Thailand | JIB |
-| Vietnam | MemoryZone |
-| Hong Kong | Jumbo Computer |
+| Country | Retailers | Selected by default |
+|---------|-----------|----------------------|
+| India | MDComputers, PrimeABGB, Vedant Computers, PC Studio | Yes |
+| Singapore | Bizgram, Dynacore | Yes |
+| Malaysia | ALL IT Hypermarket | Yes |
+| Thailand | JIB, Speed Computer | Yes |
+| Vietnam | MemoryZone | Yes |
+| Hong Kong | Jumbo Computer | Yes |
+| United Kingdom | ComputerOrbit, Epsilon PC | No — opt in from the Country filter |
+
+A country only appears here once a real, live-verified storefront is found for
+it — see `tools/discover.js` for the probe used to sort a genuine Shopify/Sapo/
+WooCommerce storefront from a site that just blocks scraping. Every market
+added after the original six starts **unchecked**: the filter bar doesn't
+balloon by default, and turning one on is a deliberate choice. See
+`defaultSelected` in `src/core/sources.js`.
 
 Prices are read **per product variant**, not per product page: a listing that
 offers 16 GB and 32 GB under one title is two separate rows with their own

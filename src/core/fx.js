@@ -2,7 +2,7 @@
 
 const { getJson } = require('./http');
 
-const CURRENCIES = ['INR', 'MYR', 'VND', 'THB', 'HKD', 'SGD', 'USD'];
+const CURRENCIES = ['INR', 'MYR', 'VND', 'THB', 'HKD', 'SGD', 'USD', 'GBP'];
 
 /**
  * Live FX rates expressed as "1 unit of X = N INR".

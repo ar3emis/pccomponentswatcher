@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS = {
   settingsVersion: 2,
   autoRefreshMinutes: 30,
   refreshOnLaunch: true,
-  countries: COUNTRIES.map((c) => c.code),
+  countries: COUNTRIES.filter((c) => c.defaultSelected).map((c) => c.code),
   ramCapacities: [],
   gpuVram: []
 };

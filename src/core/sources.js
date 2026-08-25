@@ -1,12 +1,19 @@
 'use strict';
 
+/**
+ * `defaultSelected` marks the markets a fresh profile starts with checked.
+ * Every market newly added beyond the original six starts unchecked — opting
+ * in is a deliberate choice, not something a bigger COUNTRIES array should
+ * spring on an existing filter bar.
+ */
 const COUNTRIES = [
-  { code: 'IN', name: 'India',     currency: 'INR', flag: '🇮🇳' },
-  { code: 'SG', name: 'Singapore', currency: 'SGD', flag: '🇸🇬' },
-  { code: 'MY', name: 'Malaysia',  currency: 'MYR', flag: '🇲🇾' },
-  { code: 'TH', name: 'Thailand',  currency: 'THB', flag: '🇹🇭' },
-  { code: 'VN', name: 'Vietnam',   currency: 'VND', flag: '🇻🇳' },
-  { code: 'HK', name: 'Hong Kong', currency: 'HKD', flag: '🇭🇰' }
+  { code: 'IN', name: 'India',     currency: 'INR', flag: '🇮🇳', defaultSelected: true },
+  { code: 'SG', name: 'Singapore', currency: 'SGD', flag: '🇸🇬', defaultSelected: true },
+  { code: 'MY', name: 'Malaysia',  currency: 'MYR', flag: '🇲🇾', defaultSelected: true },
+  { code: 'TH', name: 'Thailand',  currency: 'THB', flag: '🇹🇭', defaultSelected: true },
+  { code: 'VN', name: 'Vietnam',   currency: 'VND', flag: '🇻🇳', defaultSelected: true },
+  { code: 'HK', name: 'Hong Kong', currency: 'HKD', flag: '🇭🇰', defaultSelected: true },
+  { code: 'UK', name: 'United Kingdom', currency: 'GBP', flag: '🇬🇧' }
 ];
 
 const COUNTRY_BY_CODE = new Map(COUNTRIES.map((c) => [c.code, c]));
@@ -221,6 +228,36 @@ const SOURCES = [
     catalog: {
       ram: { collections: ['random-access-memory', 'ram-for-pc', 'ram-notebook'] },
       gpu: { collections: ['vga-diy', 'graphic-card-amd', 'vga-nvidia-5000'] }
+    }
+  },
+
+  // ── United Kingdom ───────────────────────────────────────────────────────
+  {
+    id: 'uk-computerorbit',
+    name: 'ComputerOrbit',
+    country: 'UK',
+    currency: 'GBP',
+    kind: 'shopify',
+    base: 'https://www.computerorbit.com',
+    site: 'https://www.computerorbit.com',
+    maxPages: 3,
+    catalog: {
+      ram: { collections: ['ddr5-desktop-ram'] },
+      gpu: { collections: ['graphics-cards'] }
+    }
+  },
+  {
+    id: 'uk-epsilonpc',
+    name: 'Epsilon PC',
+    country: 'UK',
+    currency: 'GBP',
+    kind: 'shopify',
+    base: 'https://www.epsilonpc.co.uk',
+    site: 'https://www.epsilonpc.co.uk',
+    maxPages: 3,
+    catalog: {
+      ram: { collections: ['desktop-memory-ram-for-desktop-pc'] },
+      gpu: { collections: ['graphics-card'] }
     }
   },
 

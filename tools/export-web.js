@@ -109,7 +109,7 @@ async function main() {
     settings: {
       autoRefreshMinutes: 0,
       refreshOnLaunch: false,
-      countries: COUNTRIES.map((c) => c.code),
+      countries: COUNTRIES.filter((c) => c.defaultSelected).map((c) => c.code),
       ramCapacities: [],
       gpuVram: []
     },

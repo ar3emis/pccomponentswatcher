@@ -47,7 +47,45 @@ const CANDIDATES = [
   // Hong Kong
   ['HK', 'https://www.jumbo-computer.com'], ['HK', 'https://www.centralfield.com'], ['HK', 'https://www.dgtech.hk'],
   ['HK', 'https://www.foundtech.com.hk'], ['HK', 'https://hkstellar.com'], ['HK', 'https://www.gears.com.hk'],
-  ['HK', 'https://www.altechhk.com'], ['HK', 'https://www.hkpcshop.com'], ['HK', 'https://shop.megabyte.com.hk']
+  ['HK', 'https://www.altechhk.com'], ['HK', 'https://www.hkpcshop.com'], ['HK', 'https://shop.megabyte.com.hk'],
+
+  // ── Worldwide expansion candidates (unverified — this file's whole job is to
+  // sort real, scrapeable storefronts out from this list before anything here
+  // is added to src/core/sources.js) ─────────────────────────────────────────
+
+  // United States
+  ['US', 'https://parts.theserverstore.com'], ['US', 'https://www.xidax.com'], ['US', 'https://www.ibuypower.com'],
+  ['US', 'https://www.sabrepc.com'], ['US', 'https://www.titancomputers.com'], ['US', 'https://www.centralcomputer.com'],
+  ['US', 'https://www.microcenter.com'], ['US', 'https://www.newegg.com'], ['US', 'https://www.compsource.com'],
+
+  // United Kingdom
+  ['UK', 'https://www.overclockers.co.uk'], ['UK', 'https://www.box.co.uk'], ['UK', 'https://www.mrmemory.co.uk'],
+  ['UK', 'https://www.drmem.com'], ['UK', 'https://houseofcomputers.co.uk'], ['UK', 'https://www.computerorbit.com'],
+  ['UK', 'https://www.epsilonpc.co.uk'], ['UK', 'https://www.ebuyer.com'], ['UK', 'https://www.scan.co.uk'],
+
+  // Germany
+  ['DE', 'https://www.alternate.de'], ['DE', 'https://www.caseking.de'], ['DE', 'https://www.reichelt.com'],
+  ['DE', 'https://www.mlcomputers.de'], ['DE', 'https://www.mindfactory.de'],
+
+  // France
+  ['FR', 'https://www.grosbill.com'], ['FR', 'https://www.cybertek.fr'], ['FR', 'https://www.ldlc.com'],
+  ['FR', 'https://www.alternate.fr'],
+
+  // Netherlands
+  ['NL', 'https://pconderdelen.nl'], ['NL', 'https://azerty.nl'], ['NL', 'https://www.megekko.nl'],
+  ['NL', 'https://www.alternate.nl'],
+
+  // Canada
+  ['CA', 'https://www.memoryexpress.com'], ['CA', 'https://www.pcczone.ca'], ['CA', 'https://www.pc-canada.com'],
+  ['CA', 'https://www.canadacomputers.com'], ['CA', 'https://www.newegg.ca'],
+
+  // Australia
+  ['AU', 'https://www.mwave.com.au'], ['AU', 'https://www.umart.com.au'], ['AU', 'https://www.msy.com.au'],
+  ['AU', 'https://www.pcbyte.com.au'], ['AU', 'https://www.jw.com.au'],
+
+  // Japan
+  ['JP', 'https://www.dospara.co.jp'], ['JP', 'https://www.pc-koubou.jp'], ['JP', 'https://shop.tsukumo.co.jp'],
+  ['JP', 'https://www.ark-pc.co.jp']
 ];
 
 async function probeJsonStorefront(base) {

@@ -41,7 +41,8 @@ const COUNTRY_COLORS = {
   MY: '#f0b429',
   TH: '#c084fc',
   VN: '#ff8a65',
-  HK: '#4dd0e1'
+  HK: '#4dd0e1',
+  UK: '#e05d5d'
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -50,8 +51,8 @@ const isGpu = () => state.category === 'gpu';
 
 // ── Formatting ─────────────────────────────────────────────────────────────
 
-const CURRENCY_DECIMALS = { INR: 0, SGD: 2, MYR: 2, THB: 0, VND: 0, HKD: 0, USD: 2 };
-const CURRENCY_SYMBOL = { INR: '₹', SGD: 'S$', MYR: 'RM', THB: '฿', VND: '₫', HKD: 'HK$', USD: '$' };
+const CURRENCY_DECIMALS = { INR: 0, SGD: 2, MYR: 2, THB: 0, VND: 0, HKD: 0, USD: 2, GBP: 2 };
+const CURRENCY_SYMBOL = { INR: '₹', SGD: 'S$', MYR: 'RM', THB: '฿', VND: '₫', HKD: 'HK$', USD: '$', GBP: '£' };
 
 function fmtLocal(value, currency) {
   const d = CURRENCY_DECIMALS[currency] != null ? CURRENCY_DECIMALS[currency] : 2;
@@ -659,7 +660,7 @@ function renderUpgradeBanner() {
   host.innerHTML = `
     <div class="banner-text">
       <strong>${hidden} listings above ${max}GB are locked.</strong>
-      You can see how cheap they get — but not which of the six markets has them.
+      You can see how cheap they get — but not which of the ${state.countries.length} markets has them.
       ${a.signedIn ? '' : `Sign in for a free ${a.trialDays || 7}-day trial with full access.`}
     </div>
     ${
@@ -793,7 +794,7 @@ function toggleChip(kind, rawValue) {
 
 function applyDefaults() {
   const s = state.settings;
-  state.filters.countries = new Set(s.countries || state.countries.map((c) => c.code));
+  state.filters.countries = new Set(s.countries || state.countries.filter((c) => c.defaultSelected).map((c) => c.code));
   // `?? []` rather than `|| [...]`: an explicitly empty list means "no size
   // filter" and must survive, or saved settings get silently overridden.
   state.filters.memory = new Set(isGpu() ? s.gpuVram ?? [] : s.ramCapacities ?? []);
@@ -828,14 +829,19 @@ async function openBilling() {
   }
 }
 
+/** Never hardcode the market count in copy — it goes stale the moment a market is added or dropped. */
+function updateBrandBlurb() {
+  const n = state.countries.length;
+  const kind = isGpu() ? 'graphics-card' : 'DDR5 memory';
+  $('.brand-text p').textContent = `Live ${kind} prices across ${n} market${n === 1 ? '' : 's'} worldwide`;
+}
+
 function switchCategory(cat) {
   if (state.category === cat) return;
   state.category = cat;
   closeDropdowns();
   $$('.seg').forEach((b) => b.classList.toggle('seg-on', b.dataset.cat === cat));
-  $('.brand-text p').textContent = isGpu()
-    ? 'Live graphics-card prices across six Asian markets'
-    : 'Live DDR5 memory prices across six Asian markets';
+  updateBrandBlurb();
   syncCategoryChips();
   applyDefaults();
   syncCategoryChips();
@@ -990,6 +996,7 @@ async function init() {
   state.account = boot.account || null;
   state.freeMaxGB = boot.freeMaxGB || null;
 
+  updateBrandBlurb();
   buildChips();
   applyDefaults();
   syncCategoryChips();

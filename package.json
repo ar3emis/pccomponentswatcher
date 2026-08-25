@@ -2,7 +2,7 @@
   "name": "pccomponentswatcher",
   "productName": "PCComponentsWatcher",
   "version": "1.0.0",
-  "description": "Real-time DDR5 memory and graphics-card prices across India, Malaysia, Vietnam, Thailand, Hong Kong and Singapore",
+  "description": "Real-time DDR5 memory and graphics-card prices from verified retailers worldwide",
   "main": "main.js",
   "author": "Sameek Kundu",
   "license": "MIT",

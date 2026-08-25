@@ -13,7 +13,7 @@ const { isFreeListing } = require('./tiers');
  *
  * What a subscription buys is *where* the cheapest price is. The aggregate
  * deliberately keeps the price range and the spread — the shopper can see a
- * good deal exists, but finding it still means checking six markets by hand.
+ * good deal exists, but finding it still means checking every market by hand.
  */
 
 /** The only fields of a locked listing that ever leave the server. */
