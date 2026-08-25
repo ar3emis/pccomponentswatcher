@@ -351,6 +351,48 @@ main { flex: 1 1 auto; overflow: hidden; position: relative; }
   .chips-scroll { max-width: 320px; }
 }
 
+/* ── Mobile ──────────────────────────────────────────────────────────────
+ * The desktop layout is a fixed-viewport app shell: `body` never scrolls, and
+ * `main` fills whatever height the header chrome (topbar + filters + tabs)
+ * leaves behind. On a phone that chrome is routinely taller than the entire
+ * screen — ~750px of it on a 375-wide viewport, mostly the filter bar's ~10
+ * groups wrapping across many rows — which collapsed `main` to 0px. That
+ * wasn't a scroll-capture glitch: the price table had nowhere left to render,
+ * on a page that could never scroll to reach it either.
+ *
+ * Below this width the shell stops being fixed-viewport and just flows like
+ * an ordinary page: `body` scrolls, filter groups stack full-width instead of
+ * competing for a few hundred pixels of row space, and only the table itself
+ * keeps an internal scroll box (so its header can stay sticky over a long
+ * list without the whole page needing to scroll past hundreds of rows first).
+ */
+@media (max-width: 768px) {
+  html, body { height: auto; min-height: 100%; overflow-y: auto; overflow-x: hidden; }
+  body { display: block; }
+
+  .topbar { flex-wrap: wrap; gap: 10px; padding: 12px 14px; }
+  .topbar-right { flex-wrap: wrap; gap: 8px; width: 100%; justify-content: flex-start; }
+  .fx-strip { flex-wrap: wrap; row-gap: 4px; }
+
+  .filters { flex-direction: column; align-items: stretch; gap: 12px; padding: 10px 14px; }
+  .filter-group, .filter-group-narrow, .filter-group-grow { width: 100%; min-width: 0; }
+  .chips-scroll { max-width: none; }
+  .dropdown { width: 100%; min-width: 0; }
+  .dropdown-panel { max-width: calc(100vw - 32px); }
+
+  main { overflow: visible; }
+  .view { height: auto; overflow: visible; padding: 14px; }
+  .view-head { flex-wrap: wrap; }
+  .card-head { flex-wrap: wrap; row-gap: 8px; }
+
+  .table-wrap { max-height: 65vh; }
+
+  .tabs { flex-wrap: wrap; height: auto; padding: 8px 14px; row-gap: 6px; }
+  .tabs-meta { margin-left: 0; width: 100%; justify-content: space-between; }
+
+  .upgrade-banner { flex-wrap: wrap; }
+}
+
 /* ── Category switch ─────────────────────────────────────────────────── */
 .segmented {
   display: inline-flex; padding: 3px; gap: 3px;
