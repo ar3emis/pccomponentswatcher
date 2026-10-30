@@ -9,20 +9,26 @@ on:
     branches: [main]
     paths-ignore:
       - 'README.md'
-      - 'SETUP.md'
       - 'data/**'
 
-# Allow one publish at a time; a queued run picks up the newer prices anyway.
+# One publish at a time. A queued run picks up the newer prices anyway, so
+# cancelling the in-flight one would only waste a completed scrape.
 concurrency:
   group: publish-site
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: write   # commits the refreshed price history
+  pages: write      # publishes the built site
+  id-token: write   # required by actions/deploy-pages
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,58 +39,36 @@ jobs:
 
       - run: npm ci
 
-      # Cheap, and there is no point scraping for six minutes if the access
-      # rule or the signature checks are broken.
-      - name: Verify access rules and signature handling
-        run: |
-          node tools/test-tier-parity.js
-          node tools/test-ui-tiers.js
-          node tools/test-crypto.mjs
+      - name: Check the parsers still agree with their fixtures
+        run: npm test
 
+      # Several retailers serve a bot-check page to plain HTTP clients and only
+      # render prices with JavaScript. Those are scraped in a real browser.
       - name: Install Chromium for the browser-only retailers
         run: npx playwright install --with-deps chromium
 
-      - name: Scrape prices and build both payloads
+      - name: Scrape prices and build the site
         run: npm run export-web
 
-      # These two gate the paywall. If either fails, nothing is published.
-      - name: Verify no paid data leaks into the free payload
-        run: npm run test:payload
-
-      - name: Verify no payload sits in the public asset root
-        run: npm run test:assets
-
-      # Until Cloudflare is configured (see SETUP.md) the scrape and the
-      # access-control tests still run and report; only publishing is skipped.
-      - name: Check whether Cloudflare is configured
-        id: cf
+      - name: Fail if the scrape produced nothing
         run: |
-          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ] && [ -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::Cloudflare secrets are not set — built and tested, but not published. See SETUP.md.'
+          count=$(node -e "process.stdout.write(String(require('./site/data.json').snapshot.listings.length))")
+          echo "in-stock listings: $count"
+          if [ "$count" -lt 50 ]; then
+            echo "::error::Only $count listings — refusing to publish a near-empty site."
+            exit 1
           fi
 
-      - name: Upload payloads to KV
-        if: steps.cf.outputs.ready == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        working-directory: worker
-        run: |
-          npx wrangler kv key put data:free --path ../dist-data/data-free.json --binding DATA --remote
-          npx wrangler kv key put data:full --path ../dist-data/data-full.json --binding DATA --remote
+      - uses: actions/configure-pages@v5
 
-      - name: Deploy the Worker and static assets
-        if: steps.cf.outputs.ready == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        working-directory: worker
-        run: npx wrangler deploy
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
 
-      # History lives in the repo so trend lines survive between runs.
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      # History lives in the repo so the trend lines survive between runs.
       - name: Commit refreshed price history
         run: |
           git config user.name  'github-actions[bot]'

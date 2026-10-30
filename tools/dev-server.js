@@ -1,112 +1,52 @@
 'use strict';
 
 /**
- * Local stand-in for the Worker, for UI work without Google or Stripe set up.
+ * Serves `site/` exactly as GitHub Pages will, for local UI work.
  *
- * It serves `site/` and answers the same three endpoints the Worker does,
- * choosing the payload from a `tier` query or cookie so all three states can be
- * exercised in a browser:
- *
- *   node tools/dev-server.js            → anonymous
- *   then visit /?tier=free  /?tier=paid /?tier=anon
- *
- * This is a development tool only. It performs no authentication whatsoever and
- * must never be exposed to a network.
+ * Usage: node tools/dev-server.js [port]
  */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', 'site');
-const DATA = path.join(__dirname, '..', 'dist-data');
-const PORT = Number(process.env.PORT || 8791);
+const PORT = Number(process.argv[2] || process.env.PORT || 4178);
 
-const MIME = {
+const TYPES = {
   '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
+  '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon'
 };
 
-function readCookie(req, name) {
-  const header = req.headers.cookie || '';
-  for (const part of header.split(/;\s*/)) {
-    const eq = part.indexOf('=');
-    if (eq > 0 && part.slice(0, eq) === name) return decodeURIComponent(part.slice(eq + 1));
-  }
-  return null;
-}
-
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, `http://localhost:${PORT}`);
-  const send = (status, body, headers = {}) => {
-    res.writeHead(status, { 'Cache-Control': 'no-store', ...headers });
-    res.end(body);
-  };
-  const sendJson = (status, obj, headers = {}) =>
-    send(status, JSON.stringify(obj), { 'Content-Type': 'application/json; charset=utf-8', ...headers });
+  const url = decodeURIComponent((req.url || '/').split('?')[0]);
+  const rel = url === '/' ? 'index.html' : url.replace(/^\/+/, '');
 
-  // Tier is sticky so a page reload keeps whatever state you are testing.
-  const qTier = url.searchParams.get('tier');
-  const tier = qTier || readCookie(req, 'dev_tier') || 'anon';
-  const setTier = qTier ? { 'Set-Cookie': `dev_tier=${qTier}; Path=/; Max-Age=86400; SameSite=Lax` } : {};
-
-  if (url.pathname === '/api/me') {
-    const base = { priceUSD: 5, trialDays: 7, trial: null, admin: false, subscription: null };
-    const accounts = {
-      anon: { ...base, signedIn: false, email: null, tier: 'anon', fullAccess: false },
-      free: { ...base, signedIn: true, email: 'tester@gmail.com', tier: 'free', fullAccess: false },
-      trial: {
-        ...base,
-        signedIn: true,
-        email: 'newuser@gmail.com',
-        tier: 'trial',
-        fullAccess: true,
-        trial: { endsAt: Date.now() + 5 * 86400000, daysLeft: 5 }
-      },
-      paid: {
-        ...base,
-        signedIn: true,
-        email: 'sameek4@gmail.com',
-        tier: 'paid',
-        admin: true,
-        fullAccess: true,
-        subscription: { status: 'active', currentPeriodEnd: null, hasBilling: false }
-      }
-    };
-    return sendJson(200, accounts[tier] || accounts.anon, setTier);
-  }
-
-  if (url.pathname === '/api/data') {
-    // Trial sees exactly what a subscriber sees.
-    const file = tier === 'paid' || tier === 'trial' ? 'data-full.json' : 'data-free.json';
-    const full = path.join(DATA, file);
-    if (!fs.existsSync(full)) return sendJson(503, { error: `${file} not built — run npm run export-web` });
-    return send(200, fs.readFileSync(full), { 'Content-Type': 'application/json; charset=utf-8', 'X-Tier': tier, ...setTier });
-  }
-
-  if (url.pathname === '/api/checkout' || url.pathname === '/api/portal') {
-    return sendJson(200, { url: `/?tier=paid&stub=${url.pathname.slice(5)}` }, setTier);
-  }
-
-  if (url.pathname === '/auth/google') return send(302, '', { Location: '/?tier=free', ...setTier });
-  if (url.pathname === '/auth/logout') return send(302, '', { Location: '/?tier=anon', ...setTier });
-
-  // Static files.
-  const rel = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
+  // Never serve outside the site directory.
   const file = path.join(ROOT, rel);
-  if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
-    return send(404, 'not found', { 'Content-Type': 'text/plain' });
+  if (!file.startsWith(ROOT)) {
+    res.writeHead(403).end('forbidden');
+    return;
   }
-  send(200, fs.readFileSync(file), { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', ...setTier });
+
+  fs.readFile(file, (err, buf) => {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found: ' + rel);
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
+      'Cache-Control': 'no-cache'
+    });
+    res.end(buf);
+  });
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`dev server  http://localhost:${PORT}`);
-  console.log(`  /?tier=anon    signed out`);
-  console.log(`  /?tier=trial   new account, 5 of 7 trial days left`);
-  console.log(`  /?tier=free    trial expired, no subscription`);
-  console.log(`  /?tier=paid    subscriber`);
+server.listen(PORT, () => {
+  console.log(`serving ${ROOT}`);
+  console.log(`http://localhost:${PORT}`);
 });

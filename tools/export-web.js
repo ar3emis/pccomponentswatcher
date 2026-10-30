@@ -18,19 +18,11 @@ const { SOURCES, COUNTRIES, CATEGORIES } = require('../src/core/sources');
 const { BRANDS } = require('../src/core/brands');
 const { GPU_MODELS, AIB_BRANDS } = require('../src/core/gpu');
 const { RAM_CAPACITIES, GPU_VRAM } = require('../src/core/normalize');
-const { splitSnapshot } = require('../src/core/payload');
-const { FREE_MAX_GB } = require('../src/core/tiers');
 
 const ROOT = path.join(__dirname, '..');
 
-/**
- * `site/` is served publicly by the Worker's ASSETS binding, so the price
- * payloads must NOT live there — a file in that directory is reachable by URL
- * and would bypass the paywall entirely. Data goes to a sibling directory that
- * is only ever uploaded to KV.
- */
+/** Everything in `site/` is published as-is to GitHub Pages. */
 const OUT = path.join(ROOT, 'site');
-const DATA_OUT = path.join(ROOT, 'dist-data');
 const HISTORY_FILE = path.join(ROOT, 'data', 'history.json');
 
 const useBrowser = !process.argv.includes('--no-browser');
@@ -100,10 +92,8 @@ async function main() {
   const trimmedHistory = {};
   for (const id of keep) if (history[id]) trimmedHistory[id] = history[id];
 
-  // Reference data is identical in both tiers; only the snapshot differs.
-  const common = {
+  const payload = {
     generatedAt: snapshot.fetchedAt,
-    freeMaxGB: FREE_MAX_GB,
     // Empty size lists mean "no size filter" — see main.js. Defaulting to a
     // subset would hide tracked products behind a filter nobody set.
     settings: {
@@ -120,23 +110,21 @@ async function main() {
     gpuModels: GPU_MODELS.map(({ id, name, vendor, vram, tier }) => ({ id, name, vendor, vram, tier })),
     ramCapacities: RAM_CAPACITIES,
     gpuVram: GPU_VRAM,
-    sources: SOURCES.map(({ id, name, country, site, kind }) => ({ id, name, country, site, kind }))
+    sources: SOURCES.map(({ id, name, country, site, kind }) => ({ id, name, country, site, kind })),
+    snapshot: {
+      fetchedAt: snapshot.fetchedAt,
+      fx: snapshot.fx,
+      sources: snapshot.sources,
+      rejected: snapshot.rejected,
+      listings,
+      history: trimmedHistory
+    }
   };
 
-  const { free, full } = splitSnapshot({ ...snapshot, listings, history: trimmedHistory });
-
   fs.mkdirSync(OUT, { recursive: true });
-  fs.mkdirSync(DATA_OUT, { recursive: true });
   fs.mkdirSync(path.dirname(HISTORY_FILE), { recursive: true });
   fs.writeFileSync(HISTORY_FILE, JSON.stringify(history));
-  fs.writeFileSync(path.join(DATA_OUT, 'data-free.json'), JSON.stringify({ ...common, tier: 'free', snapshot: free }));
-  fs.writeFileSync(path.join(DATA_OUT, 'data-full.json'), JSON.stringify({ ...common, tier: 'paid', snapshot: full }));
-
-  // A stale payload from an older build would still be publicly reachable.
-  for (const stale of ['data.json', 'data-free.json', 'data-full.json']) {
-    const p = path.join(OUT, stale);
-    if (fs.existsSync(p)) fs.unlinkSync(p);
-  }
+  fs.writeFileSync(path.join(OUT, 'data.json'), JSON.stringify(payload));
 
   for (const f of ['styles.css', 'charts.js', 'app.js']) {
     fs.copyFileSync(path.join(ROOT, 'renderer', f), path.join(OUT, f));
@@ -152,11 +140,6 @@ async function main() {
     `\nsite/ written — ${listings.length} in-stock listings (${ram} memory, ${listings.length - ram} GPU) ` +
       `from ${ok}/${snapshot.sources.length} source jobs`
   );
-  console.log(
-    `  data-free.json  ${free.listings.length} listings ≤${FREE_MAX_GB}GB + ${free.lockedListings.length} locked aggregates`
-  );
-  console.log(`  data-full.json  ${full.listings.length} listings`);
-
   const byCountry = {};
   for (const l of listings) {
     byCountry[l.country] = byCountry[l.country] || { ram: 0, gpu: 0 };

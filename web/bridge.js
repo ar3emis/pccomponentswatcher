@@ -5,40 +5,25 @@
  *
  * `renderer/app.js` is shared verbatim between the desktop app and this site.
  * On the desktop it talks to the main process over IPC through the preload's
- * `window.ramwatch`; here the same surface is backed by the Worker's API.
+ * `window.ramwatch`; here the same surface is served from a static JSON file
+ * that a scheduled job regenerates. Nothing in the UI knows the difference.
  *
- * The payload returned by /api/data depends on who is asking. A free visitor
- * receives a blob that never contained the locked prices, so nothing here needs
- * to hide anything — `lockedListings` is simply what the server chose to send.
+ * There are no accounts and nothing is withheld: every visitor gets the whole
+ * dataset from the same file.
  */
 (function () {
+  const DATA_URL = 'data.json';
+
   let payload = null;
-  let account = { signedIn: false, tier: 'anon', email: null, priceUSD: 5, trial: null, trialDays: 7 };
-
-  const noop = () => {};
-
-  async function getJSON(url, opts) {
-    const res = await fetch(url, { credentials: 'same-origin', ...opts });
-    if (!res.ok) {
-      let detail = `HTTP ${res.status}`;
-      try {
-        detail = (await res.json()).error || detail;
-      } catch (_) {}
-      throw new Error(detail);
-    }
-    return res.json();
-  }
 
   const load = (async () => {
-    // Identity first: it decides which payload the data call returns.
-    try {
-      account = await getJSON('/api/me');
-    } catch (_) {
-      /* Signed out is a normal state, not an error. */
-    }
-    payload = await getJSON('/api/data');
+    const res = await fetch(DATA_URL, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`could not load prices (HTTP ${res.status})`);
+    payload = await res.json();
     return payload;
   })();
+
+  const noop = () => {};
 
   window.ramwatch = {
     async bootstrap() {
@@ -56,19 +41,17 @@
         snapshot: payload.snapshot,
         stats: stats(),
         refreshing: false,
-        appVersion: 'web',
-        account,
-        freeMaxGB: payload.freeMaxGB
+        appVersion: 'web'
       };
     },
 
     ready: async () => true,
 
-    // Retailers block cross-origin requests, so the browser cannot scrape.
+    // Retailers block cross-origin requests, so a browser cannot scrape them.
     // Refreshing is the scheduled job's responsibility.
     refresh: async () => false,
 
-    // Filter choices are per-visitor and per-session only.
+    // Filter choices are per-visitor and last for the session only.
     saveSettings: async (patch) => ({ ...payload.settings, ...patch }),
 
     async history(keys) {
@@ -86,32 +69,8 @@
     },
 
     revealDataFile: async () => {
-      window.open('/api/data', '_blank', 'noopener,noreferrer');
+      window.open(DATA_URL, '_blank', 'noopener,noreferrer');
       return true;
-    },
-
-    // ── Account ────────────────────────────────────────────────────────────
-    account: () => account,
-
-    signIn() {
-      const returnTo = encodeURIComponent(location.pathname + location.search);
-      location.href = `/auth/google?returnTo=${returnTo}`;
-    },
-
-    signOut() {
-      location.href = '/auth/logout';
-    },
-
-    /** Sends the visitor to Stripe Checkout. */
-    async subscribe() {
-      const { url } = await getJSON('/api/checkout', { method: 'POST' });
-      location.href = url;
-    },
-
-    /** Stripe-hosted page for changing card details or cancelling. */
-    async manageBilling() {
-      const { url } = await getJSON('/api/portal', { method: 'POST' });
-      location.href = url;
     },
 
     onSnapshot: noop,

@@ -1,7 +1,5 @@
 node_modules/
 dist/
-dist-data/
-site/
 .probe/
-.wrangler/
-.dev.vars
+# Build output: `npm run export-web` regenerates the whole directory.
+site/

@@ -2,7 +2,7 @@
   "name": "pccomponentswatcher",
   "productName": "PCComponentsWatcher",
   "version": "1.0.0",
-  "description": "Real-time DDR5 memory and graphics-card prices from verified retailers worldwide",
+  "description": "Live DDR5 memory and graphics-card prices from retailers worldwide, as a desktop app and a public website",
   "main": "main.js",
   "author": "Sameek Kundu",
   "license": "MIT",
@@ -12,9 +12,7 @@
     "dist": "electron-builder --win nsis --x64",
     "export-web": "node tools/export-web.js",
     "dev-web": "node tools/dev-server.js",
-    "test": "node tools/test-tier-parity.js && node tools/test-ui-tiers.js && node tools/test-migration.js && node tools/test-crypto.mjs && node tools/test-payload.js && node tools/test-assets.js && node tools/test-stock.js",
-    "test:payload": "node tools/test-payload.js dist-data/data-full.json",
-    "test:assets": "node tools/test-assets.js"
+    "test": "node tools/test-stock.js && node tools/test-migration.js"
   },
   "dependencies": {
     "cheerio": "^1.0.0"

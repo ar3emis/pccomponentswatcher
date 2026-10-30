@@ -26,11 +26,7 @@ const state = {
   },
   sort: { key: 'priceINR', dir: 'asc' },
   tab: 'table',
-  compareCompleteOnly: false,
-  // Web only. The desktop app has no accounts, so this stays null there and
-  // every account-aware branch below degrades to the unrestricted view.
-  account: null,
-  freeMaxGB: null
+  compareCompleteOnly: false
 };
 
 const VENDOR_ORDER = ['NVIDIA', 'AMD', 'Intel'];
@@ -84,34 +80,6 @@ function median(values) {
 }
 
 // ── Filtering ──────────────────────────────────────────────────────────────
-
-/**
- * Locked products the server described but would not price, filtered by the
- * same controls as the real rows. Empty for subscribers and on the desktop.
- */
-function visibleLocked() {
-  const snap = state.snapshot;
-  if (!snap || !snap.lockedListings) return [];
-  const f = state.filters;
-  const terms = f.search.toLowerCase().split(/\s+/).filter(Boolean);
-  const gpu = isGpu();
-
-  return snap.lockedListings.filter((l) => {
-    if (l.category !== state.category) return false;
-    if (f.memory.size && !f.memory.has(l.memoryGB)) return false;
-    if (gpu) {
-      if (f.vendors.size && !f.vendors.has(l.vendor)) return false;
-      if (f.models.size && !f.models.has(l.modelId)) return false;
-    } else if (f.form !== 'all' && l.formFactor !== f.form) return false;
-    if (f.brands.size && !f.brands.has(l.brandId)) return false;
-    if (terms.length) {
-      // Deliberately excludes retailer and country: a locked row has neither.
-      const hay = `${l.title} ${l.brandName} ${l.modelName || ''}`.toLowerCase();
-      if (!terms.every((t) => hay.includes(t))) return false;
-    }
-    return true;
-  });
-}
 
 function visibleListings() {
   const snap = state.snapshot;
@@ -172,15 +140,13 @@ function sortListings(rows) {
 
 function renderTable() {
   const rows = sortListings(visibleListings());
-  const locked = visibleLocked();
   const body = $('#priceBody');
   const empty = $('#tableEmpty');
   const gpu = isGpu();
 
-  $('#resultCount').textContent =
-    `${rows.length} listing${rows.length === 1 ? '' : 's'}` + (locked.length ? ` · ${locked.length} locked` : '');
+  $('#resultCount').textContent = `${rows.length} listing${rows.length === 1 ? '' : 's'}`;
 
-  if (!rows.length && !locked.length) {
+  if (!rows.length) {
     body.innerHTML = '';
     empty.classList.remove('hidden');
     empty.textContent = state.snapshot
@@ -211,60 +177,23 @@ function renderTable() {
         : `${r.totalGB}GB${r.modules > 1 ? ` <span class="cell-sub">${r.modules}×${r.moduleGB}</span>` : ''}`;
 
       const specCells = gpu
-        ? `<td class="gpu-only">${escapeHtml(r.modelName || '—')}${r.oc ? ' <span class="cell-sub">OC</span>' : ''}</td>`
-        : `<td class="num ram-only">${r.speed || '—'}</td><td class="num ram-only">${r.cas ? 'CL' + r.cas : '—'}</td>`;
+        ? `<td class="gpu-only col-opt-3" data-label="GPU model">${escapeHtml(r.modelName || '—')}${r.oc ? ' <span class="cell-sub">OC</span>' : ''}</td>`
+        : `<td class="num ram-only col-opt-3" data-label="Speed">${r.speed || '—'}</td>` +
+          `<td class="num ram-only col-opt-1" data-label="CAS latency">${r.cas ? 'CL' + r.cas : '—'}</td>`;
+
+      const hasTrend = series.length >= 2;
 
       return `<tr>
-        <td class="brand-cell ${tierCls}">${escapeHtml(r.brandName)}</td>
-        <td><a href="#" class="prod-link" data-url="${escapeHtml(r.url)}" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</a></td>
-        <td class="num">${sizeCell}</td>
+        <td class="brand-cell ${tierCls}" data-label="Brand">${escapeHtml(r.brandName)}</td>
+        <td data-label="Product"><a href="#" class="prod-link" data-url="${escapeHtml(r.url)}" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</a></td>
+        <td class="num" data-label="${gpu ? 'VRAM' : 'Kit'}">${sizeCell}</td>
         ${specCells}
-        <td class="flagcell"><span class="flag">${flag}</span>${escapeHtml(r.countryName)}</td>
-        <td>${escapeHtml(r.sourceName)}</td>
-        <td class="num local">${fmtLocal(r.price, r.currency)}</td>
-        <td class="num inr ${isBest ? 'inr-best' : ''}">${fmtINR(r.priceINR)}${deltaBadge(series)}</td>
-        <td class="num">${r.pricePerGBINR ? fmtINR(r.pricePerGBINR) : '—'}</td>
-        <td class="num">${window.Charts.sparkline(series)}</td>
-      </tr>`;
-    })
-    .join('') + lockedRowsHtml(locked, gpu);
-}
-
-/**
- * Rows for products the server priced but would not locate. There is no URL,
- * retailer or country to render — the API never sent one.
- */
-function lockedRowsHtml(locked, gpu) {
-  if (!locked.length) return '';
-
-  const sorted = [...locked].sort((a, b) => a.memoryGB - b.memoryGB || a.minPriceINR - b.minPriceINR);
-
-  return sorted
-    .slice(0, 400)
-    .map((l) => {
-      const tierCls = l.brandTier === 1 ? 'brand-t1' : l.brandTier === 2 ? 'brand-t2' : '';
-      const sizeCell = gpu ? `${l.vram}GB` : `${l.totalGB}GB${l.modules > 1 ? ` <span class="cell-sub">${l.modules}×${l.moduleGB}</span>` : ''}`;
-      const specCells = gpu
-        ? `<td class="gpu-only">${escapeHtml(l.modelName || '—')}${l.oc ? ' <span class="cell-sub">OC</span>' : ''}</td>`
-        : `<td class="num ram-only">${l.speed || '—'}</td><td class="num ram-only">${l.cas ? 'CL' + l.cas : '—'}</td>`;
-
-      const range =
-        l.minPriceINR === l.maxPriceINR
-          ? fmtINR(l.minPriceINR)
-          : `${fmtINR(l.minPriceINR)} – ${fmtINR(l.maxPriceINR)}`;
-
-      return `<tr class="row-locked">
-        <td class="brand-cell ${tierCls}"><span class="lock-ico" aria-hidden="true">🔒</span>${escapeHtml(l.brandName)}</td>
-        <td><span class="locked-title">${escapeHtml(l.title)}</span></td>
-        <td class="num">${sizeCell}</td>
-        ${specCells}
-        <td class="locked-cell" colspan="2">
-          <button class="link-btn unlock-btn">Unlock ${l.marketCount} market${l.marketCount === 1 ? '' : 's'}</button>
-        </td>
-        <td class="num cell-empty">—</td>
-        <td class="num inr locked-price">${range}</td>
-        <td class="num">${l.spreadPct ? l.spreadPct + '%' : '—'}</td>
-        <td class="num cell-sub">${l.offerCount} offer${l.offerCount === 1 ? '' : 's'}</td>
+        <td class="flagcell" data-label="Country"><span class="flag">${flag}</span>${escapeHtml(r.countryName)}</td>
+        <td class="col-opt-3" data-label="Retailer">${escapeHtml(r.sourceName)}</td>
+        <td class="num local col-opt-2" data-label="Local price">${fmtLocal(r.price, r.currency)}</td>
+        <td class="num inr ${isBest ? 'inr-best' : ''}" data-label="Price">${fmtINR(r.priceINR)}${deltaBadge(series)}</td>
+        <td class="num col-opt-2" data-label="Per GB">${r.pricePerGBINR ? fmtINR(r.pricePerGBINR) : '—'}</td>
+        <td class="num col-opt-1 ${hasTrend ? '' : 'card-skip'}" data-label="Trend">${window.Charts.sparkline(series)}</td>
       </tr>`;
     })
     .join('');
@@ -345,9 +274,10 @@ function renderCompare() {
       const cells = codes
         .map((c) => {
           const r = g.byCountry[c];
-          if (!r) return '<td class="num cell-empty">—</td>';
+          const meta = state.countries.find((x) => x.code === c) || { name: c };
+          if (!r) return `<td class="num cell-empty card-skip" data-label="${escapeHtml(meta.name)}">—</td>`;
           const best = r.priceINR === min;
-          return `<td class="num ${best ? 'cell-best' : ''}">
+          return `<td class="num ${best ? 'cell-best' : ''}" data-label="${escapeHtml(meta.name)}">
             <span class="cell-price">${fmtINR(r.priceINR)}</span>
             <span class="cell-sub">${fmtLocal(r.price, r.currency)} · ${escapeHtml(r.sourceName)}</span>
           </td>`;
@@ -360,10 +290,10 @@ function renderCompare() {
         : `${escapeHtml(r0.family || '')} <span class="cell-sub">${r0.totalGB}GB${r0.modules > 1 ? ` (${r0.modules}×${r0.moduleGB})` : ''}${r0.speed ? ' · ' + r0.speed : ''}${r0.cas ? ' CL' + r0.cas : ''}${r0.rgb ? ' · RGB' : ''}</span>`;
 
       return `<tr>
-        <td class="brand-cell ${tierCls}">${escapeHtml(r0.brandName)}</td>
-        <td>${label}</td>
+        <td class="brand-cell ${tierCls}" data-label="${gpu ? 'Board partner' : 'Brand'}">${escapeHtml(r0.brandName)}</td>
+        <td data-label="${gpu ? 'GPU' : 'Kit'}">${label}</td>
         ${cells}
-        <td class="num">${spread != null ? spread.toFixed(0) + '%' : '—'}</td>
+        <td class="num" data-label="Spread">${spread != null ? spread.toFixed(0) + '%' : '—'}</td>
       </tr>`;
     })
     .join('');
@@ -540,14 +470,14 @@ function renderSources() {
       const method = s.viaBrowser || s.kind === 'browser' ? 'Headless Chromium' : `HTTP · ${s.kind}`;
       const cat = (s.category || '').toUpperCase();
       return `<tr>
-        <td>${dot}${label}</td>
-        <td class="flagcell"><span class="flag">${flag}</span>${escapeHtml(s.country)}</td>
-        <td><a href="#" class="prod-link" data-url="${escapeHtml(s.site)}">${escapeHtml(s.name)}</a> <span class="cell-sub">${escapeHtml(cat)}</span></td>
-        <td class="method">${escapeHtml(method)}</td>
-        <td class="num">${s.rawCount != null ? s.rawCount : '—'}</td>
-        <td class="num">${s.count != null ? s.count : '—'}</td>
-        <td class="num">${s.ms != null ? (s.ms / 1000).toFixed(1) + 's' : '—'}</td>
-        <td>${s.error ? `<span class="err-text">${escapeHtml(s.error)}</span>` : '<span class="cell-empty">—</span>'}</td>
+        <td data-label="Status">${dot}${label}</td>
+        <td class="flagcell" data-label="Country"><span class="flag">${flag}</span>${escapeHtml(s.country)}</td>
+        <td data-label="Retailer"><a href="#" class="prod-link" data-url="${escapeHtml(s.site)}">${escapeHtml(s.name)}</a> <span class="cell-sub">${escapeHtml(cat)}</span></td>
+        <td class="method col-opt-2" data-label="Method">${escapeHtml(method)}</td>
+        <td class="num" data-label="Listings found">${s.rawCount != null ? s.rawCount : '—'}</td>
+        <td class="num" data-label="Tracked">${s.count != null ? s.count : '—'}</td>
+        <td class="num col-opt-1" data-label="Time">${s.ms != null ? (s.ms / 1000).toFixed(1) + 's' : '—'}</td>
+        <td class="col-opt-2 ${s.error ? '' : 'card-skip'}" data-label="Detail">${s.error ? `<span class="err-text">${escapeHtml(s.error)}</span>` : '<span class="cell-empty">—</span>'}</td>
       </tr>`;
     })
     .join('');
@@ -580,99 +510,7 @@ function setStatus(kind, text) {
   pill.textContent = text;
 }
 
-// ── Account & paywall (web only) ───────────────────────────────────────────
-
-/** Renders the sign-in / subscription controls. No-op in the desktop app. */
-function renderAccount() {
-  const host = $('#accountBar');
-  if (!host || !state.account) return;
-  const a = state.account;
-
-  if (!a.signedIn) {
-    host.innerHTML = `<button class="btn btn-primary" id="signInBtn">Sign in with Google</button>`;
-    return;
-  }
-
-
-  const days = a.trial ? a.trial.daysLeft : 0;
-
-  const badge =
-    a.tier === 'paid'
-      ? `<span class="tier-badge tier-paid">${a.admin ? 'Full access' : 'Subscribed'}</span>`
-      : a.tier === 'trial'
-        ? `<span class="tier-badge tier-trial">Trial · ${days} day${days === 1 ? '' : 's'} left</span>`
-        : `<span class="tier-badge tier-free">Free</span>`;
-
-  const action =
-    a.tier === 'paid'
-      ? a.admin
-        ? ''
-        : `<button class="link-btn" id="billingBtn">Manage billing</button>`
-      : `<button class="btn btn-primary btn-sm" id="upgradeBtn">${
-          a.tier === 'trial' ? 'Keep full access' : 'Unlock all'
-        } · $${a.priceUSD}/mo</button>`;
-
-  host.innerHTML = `
-    <div class="account">
-      ${badge}
-      <span class="account-email" title="${escapeHtml(a.email)}">${escapeHtml(a.email)}</span>
-      ${action}
-      <button class="link-btn" id="signOutBtn">Sign out</button>
-    </div>`;
-}
-
-/** The strip that explains why some rows are locked. */
-function renderUpgradeBanner() {
-  const host = $('#upgradeBanner');
-  if (!host || !state.account) return;
-
-  const a = state.account;
-  const max = state.freeMaxGB || 16;
-
-  if (a.tier === 'paid') {
-    host.classList.add('hidden');
-    return;
-  }
-
-  // During the trial nothing is locked, but the clock is worth showing.
-  if (a.tier === 'trial') {
-    const d = a.trial ? a.trial.daysLeft : 0;
-    host.classList.remove('hidden');
-    host.classList.add('banner-trial');
-    host.innerHTML = `
-      <div class="banner-text">
-        <strong>Free trial — ${d} day${d === 1 ? '' : 's'} left.</strong>
-        You have full access to every market and retailer. After that you keep
-        everything up to ${max}GB free.
-      </div>
-      <button class="btn btn-primary btn-sm" id="bannerUpgrade">Keep full access · $${a.priceUSD}/mo</button>`;
-    return;
-  }
-
-  host.classList.remove('banner-trial');
-  const hidden = (state.snapshot && state.snapshot.lockedCount) || 0;
-  if (!hidden) {
-    host.classList.add('hidden');
-    return;
-  }
-
-  host.classList.remove('hidden');
-  host.innerHTML = `
-    <div class="banner-text">
-      <strong>${hidden} listings above ${max}GB are locked.</strong>
-      You can see how cheap they get — but not which of the ${state.countries.length} markets has them.
-      ${a.signedIn ? '' : `Sign in for a free ${a.trialDays || 7}-day trial with full access.`}
-    </div>
-    ${
-      a.signedIn
-        ? `<button class="btn btn-primary btn-sm" id="bannerUpgrade">Unlock all · $${a.priceUSD}/mo</button>`
-        : `<button class="btn btn-primary btn-sm" id="bannerSignIn">Start free ${a.trialDays || 7}-day trial</button>`
-    }`;
-}
-
 function renderAll() {
-  renderAccount();
-  renderUpgradeBanner();
   renderFx();
   $('#lastUpdated').textContent = state.snapshot ? `updated ${fmtAgo(state.snapshot.fetchedAt)}` : '';
   if (state.tab === 'table') renderTable();
@@ -685,7 +523,7 @@ function renderAll() {
 
 function buildChips() {
   $('#countryChips').innerHTML = state.countries
-    .map((c) => `<button class="chip" data-kind="country" data-value="${c.code}">${c.flag} ${escapeHtml(c.name)}</button>`)
+    .map((c) => `<button type="button" class="chip" aria-pressed="false" data-kind="country" data-value="${c.code}">${c.flag} ${escapeHtml(c.name)}</button>`)
     .join('');
   syncCategoryChips();
 }
@@ -698,30 +536,32 @@ function syncCategoryChips() {
 
   $('#memoryLabel').textContent = gpu ? 'VRAM' : 'Kit size';
   $('#capacityChips').innerHTML = sizes
-    .map((c) => `<button class="chip" data-kind="memory" data-value="${c}">${c} GB</button>`)
+    .map((c) => `<button type="button" class="chip" aria-pressed="false" data-kind="memory" data-value="${c}">${c} GB</button>`)
     .join('');
 
   $('#brandChips').innerHTML = brands
-    .map((b) => `<button class="chip ${b.tier === 1 ? 'tier1' : ''}" data-kind="brand" data-value="${b.id}">${escapeHtml(b.name)}</button>`)
+    .map((b) => `<button type="button" class="chip ${b.tier === 1 ? 'tier1' : ''}" aria-pressed="false" data-kind="brand" data-value="${b.id}">${escapeHtml(b.name)}</button>`)
     .join('');
 
   if (gpu) {
     const vendors = VENDOR_ORDER.filter((v) => state.gpuModels.some((m) => m.vendor === v));
     $('#vendorChips').innerHTML = vendors
-      .map((v) => `<button class="chip vendor-chip vendor-${v.toLowerCase()}" data-kind="vendor" data-value="${v}">${escapeHtml(v)}</button>`)
+      .map((v) => `<button type="button" class="chip vendor-chip vendor-${v.toLowerCase()}" aria-pressed="false" data-kind="vendor" data-value="${v}">${escapeHtml(v)}</button>`)
       .join('');
 
     // The model chip should never suggest a card the current vendor filter hides.
     const models = state.filters.vendors.size ? state.gpuModels.filter((m) => state.filters.vendors.has(m.vendor)) : state.gpuModels;
     $('#modelChips').innerHTML = models
-      .map((m) => `<button class="chip ${m.tier === 1 ? 'tier1' : ''}" data-kind="model" data-value="${m.id}" title="${escapeHtml(m.name)} · ${m.vram}GB">${escapeHtml(m.name.replace(/^GeForce |^Radeon /, ''))}</button>`)
+      .map((m) => `<button type="button" class="chip ${m.tier === 1 ? 'tier1' : ''}" aria-pressed="false" data-kind="model" data-value="${m.id}" title="${escapeHtml(m.name)} · ${m.vram}GB">${escapeHtml(m.name.replace(/^GeForce |^Radeon /, ''))}</button>`)
       .join('');
   }
 
   $$('.gpu-only').forEach((el) => el.classList.toggle('hidden', !gpu));
   $$('.ram-only').forEach((el) => el.classList.toggle('hidden', gpu));
   $('#searchInput').placeholder = gpu ? 'e.g. ROG Astral 5090' : 'e.g. Vengeance 6000 CL30';
-  $('#thMemory').textContent = gpu ? 'VRAM' : 'Kit';
+  // The header cell holds a sort button — relabel that, not the cell, or the
+  // button (and its sort handler) is replaced by a bare text node.
+  $('#thMemory').querySelector('.th-sort').textContent = gpu ? 'VRAM' : 'Kit';
   $('#compareBlurb').textContent = gpu
     ? "Best available price per country for the same card, converted to INR at today's rate. Green marks the cheapest market."
     : "Best available price per country for the same kit, converted to INR at today's rate. Green marks the cheapest market.";
@@ -741,9 +581,28 @@ function syncChips() {
   $$('.chip').forEach((chip) => {
     const { kind, value } = chip.dataset;
     const v = kind === 'memory' ? Number(value) : value;
-    chip.classList.toggle('on', setFor(kind).has(v));
+    chip.setAttribute('aria-pressed', String(setFor(kind).has(v)));
   });
   updateDropdownLabels();
+  updateFilterCount();
+}
+
+/** Tells a reader with the filter panel collapsed that filters are active. */
+function updateFilterCount() {
+  const badge = $('#filterCount');
+  if (!badge) return;
+  const f = state.filters;
+  const n =
+    f.countries.size +
+    f.memory.size +
+    f.brands.size +
+    f.models.size +
+    f.vendors.size +
+    (f.form !== 'DIMM' ? 1 : 0) +
+    (f.best !== 'all' ? 1 : 0) +
+    (f.search ? 1 : 0);
+  badge.hidden = n === 0;
+  badge.textContent = `${n} active`;
 }
 
 /** Dropdown buttons show what's selected instead of forcing the panel open. */
@@ -768,6 +627,10 @@ function updateDropdownLabels() {
 function closeDropdowns(except) {
   $$('.dropdown-panel').forEach((p) => {
     if (p !== except) p.classList.add('hidden');
+  });
+  $$('.dropdown-btn').forEach((b) => {
+    const panel = b.parentElement.querySelector('.dropdown-panel');
+    b.setAttribute('aria-expanded', String(panel ? !panel.classList.contains('hidden') : false));
   });
 }
 
@@ -810,25 +673,6 @@ function applyDefaults() {
   syncChips();
 }
 
-/** An anonymous visitor must sign in before there is an account to bill. */
-async function startCheckout() {
-  if (!state.account) return;
-  if (!state.account.signedIn) return api.signIn();
-  try {
-    await api.subscribe();
-  } catch (err) {
-    setStatus('error', `Could not start checkout: ${err.message}`);
-  }
-}
-
-async function openBilling() {
-  try {
-    await api.manageBilling();
-  } catch (err) {
-    setStatus('error', `Could not open billing: ${err.message}`);
-  }
-}
-
 /** Never hardcode the market count in copy — it goes stale the moment a market is added or dropped. */
 function updateBrandBlurb() {
   const n = state.countries.length;
@@ -840,7 +684,7 @@ function switchCategory(cat) {
   if (state.category === cat) return;
   state.category = cat;
   closeDropdowns();
-  $$('.seg').forEach((b) => b.classList.toggle('seg-on', b.dataset.cat === cat));
+  $$('.seg').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cat === cat)));
   updateBrandBlurb();
   syncCategoryChips();
   applyDefaults();
@@ -849,6 +693,48 @@ function switchCategory(cat) {
 }
 
 // ── Wiring ─────────────────────────────────────────────────────────────────
+
+/**
+ * On a phone the expanded filter block is taller than the screen, so the
+ * prices below it are never the first thing you see. Start it folded there and
+ * leave it open everywhere it fits. The summary is only rendered at those same
+ * widths, so a desktop reader can never end up with no way to reopen it.
+ */
+function collapseFiltersOnSmallScreens() {
+  const wrap = $('#filtersWrap');
+  if (!wrap) return;
+  const small = window.matchMedia('(max-width: 880px)');
+  const apply = () => {
+    wrap.open = !small.matches;
+  };
+  apply();
+  small.addEventListener('change', apply);
+}
+
+/** Switches the visible panel and keeps the tablist's ARIA state honest. */
+function selectTab(name) {
+  state.tab = name;
+  $$('.tab').forEach((t) => {
+    const on = t.dataset.tab === name;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+  });
+  $$('.view').forEach((v) => {
+    const on = v.id === `view-${name}`;
+    v.classList.toggle('view-active', on);
+    v.hidden = !on;
+  });
+  renderAll();
+}
+
+/** Mirrors the sort state onto aria-sort, which also drives the arrow in CSS. */
+function syncSortHeaders() {
+  $$('#priceTable thead th').forEach((th) => {
+    const btn = th.querySelector('.th-sort');
+    const on = btn && btn.dataset.sort === state.sort.key;
+    th.setAttribute('aria-sort', on ? (state.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  });
+}
 
 function wire() {
   document.addEventListener('click', (e) => {
@@ -859,15 +745,10 @@ function wire() {
       const wasHidden = panel.classList.contains('hidden');
       closeDropdowns();
       panel.classList.toggle('hidden', !wasHidden);
+      dropdownBtn.setAttribute('aria-expanded', String(wasHidden));
       return;
     }
     if (!dropdown) closeDropdowns();
-
-    // Account controls exist only on the web build.
-    if (e.target.closest('#signInBtn, #bannerSignIn')) return api.signIn();
-    if (e.target.closest('#signOutBtn')) return api.signOut();
-    if (e.target.closest('#upgradeBtn, #bannerUpgrade, .unlock-btn')) return startCheckout();
-    if (e.target.closest('#billingBtn')) return openBilling();
 
     const seg = e.target.closest('.seg');
     if (seg) return switchCategory(seg.dataset.cat);
@@ -883,22 +764,32 @@ function wire() {
     }
 
     const tab = e.target.closest('.tab');
-    if (tab) {
-      state.tab = tab.dataset.tab;
-      $$('.tab').forEach((t) => t.classList.toggle('tab-active', t === tab));
-      $$('.view').forEach((v) => v.classList.toggle('view-active', v.id === `view-${state.tab}`));
-      renderAll();
-      return;
-    }
+    if (tab) return selectTab(tab.dataset.tab);
 
-    const th = e.target.closest('th.sortable');
-    if (th) {
-      const key = th.dataset.sort;
+    const sortBtn = e.target.closest('.th-sort');
+    if (sortBtn) {
+      const key = sortBtn.dataset.sort;
       state.sort = state.sort.key === key ? { key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' };
-      $$('#priceTable th').forEach((h) => h.classList.remove('sorted-asc', 'sorted-desc'));
-      th.classList.add(state.sort.dir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+      syncSortHeaders();
       renderTable();
     }
+  });
+
+  // Left/right arrows move between tabs, as a tablist is expected to.
+  $('.tabs').addEventListener('keydown', (e) => {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+    const tabs = $$('.tab');
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    const next =
+      e.key === 'Home'
+        ? 0
+        : e.key === 'End'
+          ? tabs.length - 1
+          : (i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[next].focus();
+    selectTab(tabs[next].dataset.tab);
   });
 
   // The static web build has no refresh button — refreshing there is a scheduled job's job.
@@ -993,14 +884,14 @@ async function init() {
   state.ramCapacities = boot.ramCapacities || [16, 24, 32, 48, 64, 96, 128];
   state.gpuVram = boot.gpuVram || [8, 12, 16, 24, 32];
   state.sources = boot.sources;
-  state.account = boot.account || null;
-  state.freeMaxGB = boot.freeMaxGB || null;
 
   updateBrandBlurb();
   buildChips();
   applyDefaults();
   syncCategoryChips();
+  syncSortHeaders();
   wire();
+  collapseFiltersOnSmallScreens();
 
   $('#intervalSelect').value = String(boot.settings.autoRefreshMinutes || 0);
   $('#launchRefresh').checked = boot.settings.refreshOnLaunch !== false;
