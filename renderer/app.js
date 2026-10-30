@@ -41,6 +41,10 @@ const COUNTRY_COLORS = {
   UK: '#e05d5d'
 };
 
+// Desktop-only controls; absent on the web build, so always null-checked.
+let intervalSelect = null;
+let launchRefresh = null;
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const isGpu = () => state.category === 'gpu';
@@ -826,17 +830,20 @@ function wire() {
   $('#chartHistoryMode').addEventListener('change', renderCharts);
   $('#chartHistoryListing').addEventListener('change', renderCharts);
 
-  $('#intervalSelect').addEventListener('change', (e) => {
+  intervalSelect = $('#intervalSelect');
+  if (intervalSelect) intervalSelect.addEventListener('change', (e) => {
     api.saveSettings({ autoRefreshMinutes: Number(e.target.value) }).then((s) => {
       state.settings = s;
     });
   });
-  $('#launchRefresh').addEventListener('change', (e) => {
+  launchRefresh = $('#launchRefresh');
+  if (launchRefresh) launchRefresh.addEventListener('change', (e) => {
     api.saveSettings({ refreshOnLaunch: e.target.checked }).then((s) => {
       state.settings = s;
     });
   });
-  $('#revealBtn').addEventListener('click', () => api.revealDataFile());
+  const revealBtn = $('#revealBtn');
+  if (revealBtn) revealBtn.addEventListener('click', () => api.revealDataFile());
 
   window.addEventListener('resize', () => {
     if (state.tab === 'charts') renderCharts();
@@ -893,8 +900,8 @@ async function init() {
   wire();
   collapseFiltersOnSmallScreens();
 
-  $('#intervalSelect').value = String(boot.settings.autoRefreshMinutes || 0);
-  $('#launchRefresh').checked = boot.settings.refreshOnLaunch !== false;
+  if (intervalSelect) intervalSelect.value = String(boot.settings.autoRefreshMinutes || 0);
+  if (launchRefresh) launchRefresh.checked = boot.settings.refreshOnLaunch !== false;
 
   if (boot.snapshot) {
     state.snapshot = boot.snapshot;

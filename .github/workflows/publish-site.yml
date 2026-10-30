@@ -69,10 +69,22 @@ jobs:
         uses: actions/deploy-pages@v4
 
       # History lives in the repo so the trend lines survive between runs.
+      # The site is already deployed by this point, so a push that loses a race
+      # with a commit landing mid-run must not fail the job: rebase and retry,
+      # and if it still will not land, say so and move on.
       - name: Commit refreshed price history
         run: |
           git config user.name  'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add data/history.json
-          git diff --staged --quiet || git commit -m 'chore: refresh price history'
-          git push
+          git diff --staged --quiet && { echo 'history unchanged'; exit 0; }
+          git commit -m 'chore: refresh price history'
+          for attempt in 1 2 3; do
+            if git push; then
+              echo "pushed on attempt $attempt"
+              exit 0
+            fi
+            echo "push rejected, rebasing onto the newer main (attempt $attempt)"
+            git pull --rebase --strategy-option=ours origin main || git rebase --abort
+          done
+          echo '::warning::Could not push the refreshed history; the next run will carry it.'

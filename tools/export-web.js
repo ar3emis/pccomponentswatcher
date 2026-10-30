@@ -27,6 +27,9 @@ const HISTORY_FILE = path.join(ROOT, 'data', 'history.json');
 
 const useBrowser = !process.argv.includes('--no-browser');
 
+/** Recent price points published per listing — about twelve days at 6h refreshes. */
+const PUBLISHED_HISTORY_POINTS = 48;
+
 /** Price history is carried between CI runs so the trend lines survive. */
 function loadHistory() {
   try {
@@ -87,10 +90,30 @@ async function main() {
   const history = recordHistory(loadHistory(), snapshot);
 
   // Only in-stock rows are published; the site never shows what you cannot buy.
-  const listings = snapshot.listings.filter((l) => l.inStock);
+  // Fields no part of the UI reads. `image` in particular carries a long CDN
+  // URL per row, and every visitor downloads the whole file on first paint.
+  const DROP = new Set(['image', 'generation', 'sourceId']);
+
+  const listings = snapshot.listings
+    .filter((l) => l.inStock)
+    .map((l) => Object.fromEntries(Object.entries(l).filter(([k]) => !DROP.has(k))));
+
+  // The repo keeps the full series so trends keep accumulating; the published
+  // copy carries only the recent tail, which is all the sparkline and the
+  // history chart can actually show. Untrimmed, history was 82% of a 6.6MB
+  // download — the page sat on "Loading…" for seconds before its first row.
   const keep = new Set(listings.map((l) => l.id));
   const trimmedHistory = {};
-  for (const id of keep) if (history[id]) trimmedHistory[id] = history[id];
+  for (const id of keep) {
+    const series = history[id];
+    if (!series) continue;
+    // Both charts plot the INR figure and nothing else, and every published
+    // row is in stock, so the local price and the stock flag are dead weight.
+    trimmedHistory[id] = series.slice(-PUBLISHED_HISTORY_POINTS).map((pt) => ({
+      t: pt.t,
+      r: Math.round(pt.r != null ? pt.r : pt.p)
+    }));
+  }
 
   const payload = {
     generatedAt: snapshot.fetchedAt,
@@ -134,8 +157,10 @@ async function main() {
   }
   fs.copyFileSync(path.join(ROOT, 'build', 'icon.png'), path.join(OUT, 'icon.png'));
 
+  const bytes = fs.statSync(path.join(OUT, 'data.json')).size;
   const ok = snapshot.sources.filter((s) => s.ok).length;
   const ram = listings.filter((l) => l.category === 'ram').length;
+  console.log(`\ndata.json: ${(bytes / 1048576).toFixed(2)} MB`);
   console.log(
     `\nsite/ written — ${listings.length} in-stock listings (${ram} memory, ${listings.length - ram} GPU) ` +
       `from ${ok}/${snapshot.sources.length} source jobs`
